@@ -2301,9 +2301,16 @@ export function DecisionInsightPanel({
   compact = false,
 }: DecisionInsightPanelProps) {
   // ========================================
+  // 【防御入口】统一防御层 - 防止 undefined/null 访问
+  // ========================================
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safePlayers = Array.isArray(players) ? players : [];
+  const safeCurrentIndex = typeof currentIndex === 'number' && currentIndex >= 0 ? currentIndex : 0;
+
+  // ========================================
   // 边界检查：无事件时显示空状态
   // ========================================
-  if (events.length === 0) {
+  if (safeEvents.length === 0) {
     return (
       <div
         style={{
@@ -2324,22 +2331,22 @@ export function DecisionInsightPanel({
   // ========================================
   // 从 DecisionTimelineModel 构建数据
   // ========================================
-  const playerInfos: PlayerInfo[] = players.map(p => ({
-    id: p.id,
-    name: p.name,
-    seat: p.seat,
+  const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+    id: p?.id ?? '',
+    name: p?.name ?? 'Unknown',
+    seat: p?.seat,
   }));
 
   const playerNames = buildPlayerNameMap(playerInfos);
-  const timeline = buildDecisionTimeline(events, playerInfos, 0);
+  const timeline = buildDecisionTimeline(safeEvents, playerInfos, 0);
 
   // ========================================
   // 从 DecisionTimeline 派生聚合洞察
   // ========================================
-  const pressureOverview = derivePressureOverview(timeline, currentIndex);
-  const playerTendencies = derivePlayerTendencies(timeline, currentIndex, playerNames);
-  const polarizationSignals = derivePolarizationSignals(timeline, currentIndex);
-  const riskBalances = deriveRiskCommitmentBalance(timeline, currentIndex);
+  const pressureOverview = derivePressureOverview(timeline, safeCurrentIndex);
+  const playerTendencies = derivePlayerTendencies(timeline, safeCurrentIndex, playerNames);
+  const polarizationSignals = derivePolarizationSignals(timeline, safeCurrentIndex);
+  const riskBalances = deriveRiskCommitmentBalance(timeline, safeCurrentIndex);
   const keyInsights = generateInsights(
     pressureOverview,
     playerTendencies,
@@ -2350,7 +2357,7 @@ export function DecisionInsightPanel({
   // ========================================
   // 从 DecisionTimelineQueries 派生扩展指标
   // ========================================
-  const relevantTimeline = timeline.filter(d => d.index <= currentIndex);
+  const relevantTimeline = timeline.filter(d => d.index <= safeCurrentIndex);
   const volatilityMetrics = calculateVolatilityMetrics(relevantTimeline);
   const riskEscalation = calculateRiskEscalationCurve(relevantTimeline);
   const commitmentMomentum = calculateCommitmentMomentum(relevantTimeline);

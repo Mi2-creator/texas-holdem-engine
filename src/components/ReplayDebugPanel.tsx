@@ -26,8 +26,26 @@ import React from 'react';
 import { ReplayViewModel, PlayerActions } from '../types/replay';
 import type { ReplayEvent } from '../replay/events';
 import type { ExecutorMode } from '../commands/CommandExecutor';
+
+// ============================================================================
+// 【Phase 4】Experience Layer Imports
+// ============================================================================
+import {
+  determineActiveView,
+  getViewModeColor,
+  isPanelPrimary,
+  type ViewModeResult,
+} from '../controllers/ViewModeController';
+import { ContextBar } from './ContextBar';
+import { CollapsiblePanel, PanelGroup } from './CollapsiblePanel';
+import { buildDecisionTimeline, type PlayerInfo } from '../models/DecisionTimelineModel';
+
+// ============================================================================
+// Panel Components
+// ============================================================================
 import { StateExplanationPanel } from './StateExplanationPanel';
 import { HandNarrativePanel } from './HandNarrativePanel';
+import { MinimalErrorBoundary } from './MinimalErrorBoundary';
 import { HandAnalyticsPanel } from './HandAnalyticsPanel';
 import { DecisionInsightPanel } from './DecisionInsightPanel';
 import { DecisionComparisonPanel } from './DecisionComparisonPanel';
@@ -131,6 +149,45 @@ export function ReplayDebugPanel({
     onDataSourceChange?.(e.target.value);
   };
 
+  // ========================================
+  // 【Phase 4】View Mode Calculation
+  // ========================================
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safePlayers = Array.isArray(viewModel.snapshot.players) ? viewModel.snapshot.players : [];
+
+  // Build player info for timeline
+  const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+    id: p?.id ?? '',
+    name: p?.name ?? 'Unknown',
+    seat: p?.seat,
+  }));
+
+  // Build decision timeline for view mode determination
+  const timeline = buildDecisionTimeline(safeEvents, playerInfos, 0);
+
+  // Get current event
+  const currentEventForView = safeEvents[viewModel.index] ?? null;
+
+  // Determine active view mode
+  const viewModeResult: ViewModeResult = determineActiveView(
+    currentEventForView,
+    safeEvents,
+    timeline,
+    viewModel.index,
+    0, // heroSeat - default to seat 0
+    playerInfos
+  );
+
+  const { mode: viewMode, panelVisibility, contextBar, highlightDecision } = viewModeResult;
+
+  // Panel theme colors
+  const panelColors = {
+    narrative: '#a78bfa',
+    comparison: '#06b6d4',
+    insight: '#22c55e',
+    alignment: '#f472b6',
+  };
+
   return (
     <div
       style={{
@@ -171,6 +228,19 @@ export function ReplayDebugPanel({
           Developer Only
         </span>
       </div>
+
+      {/* ================================================================ */}
+      {/* 【Phase 4】Context Bar - 上下文信息栏 */}
+      {/* ================================================================ */}
+      {safeEvents.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <ContextBar
+            data={contextBar}
+            viewMode={viewMode}
+            compact={true}
+          />
+        </div>
+      )}
 
       {/* 数据源切换 */}
       {dataSourceOptions && dataSourceOptions.length > 0 && (
@@ -365,79 +435,171 @@ export function ReplayDebugPanel({
       )}
 
       {/* ================================================================ */}
-      {/* 【Post-Freeze】Hand Narrative Panel */}
+      {/* 【Phase 4】Primary View Area - 主视图区域 */}
+      {/* 根据 ViewMode 自动切换主要分析面板 */}
       {/* ================================================================ */}
-      {events && events.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <HandNarrativePanel
-            events={events}
-            currentIndex={viewModel.index}
-            players={viewModel.snapshot.players}
+      {safeEvents.length > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: 12,
+            background: `${getViewModeColor(viewMode)}08`,
+            border: `1px solid ${getViewModeColor(viewMode)}20`,
+            borderRadius: 8,
+          }}
+        >
+          {/* Primary View Header */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: 12,
+              paddingBottom: 8,
+              borderBottom: `1px solid ${getViewModeColor(viewMode)}15`,
+            }}
+          >
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: getViewModeColor(viewMode),
+              }}
+            />
+            <span
+              style={{
+                fontSize: 10,
+                color: getViewModeColor(viewMode),
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              {viewMode === 'narrative-default' && 'Story Mode'}
+              {viewMode === 'narrative-dramatic' && 'Climax Mode'}
+              {viewMode === 'comparison-focus' && 'Decision Mode'}
+              {viewMode === 'insight-expanded' && 'Analysis Mode'}
+            </span>
+            {highlightDecision && (
+              <span
+                style={{
+                  marginLeft: 'auto',
+                  padding: '2px 8px',
+                  background: 'rgba(6, 182, 212, 0.2)',
+                  border: '1px solid rgba(6, 182, 212, 0.4)',
+                  borderRadius: 4,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: '#06b6d4',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Key Moment
+              </span>
+            )}
+          </div>
+
+          {/* Narrative Panel - Primary when narrative modes */}
+          <CollapsiblePanel
             title="Hand Narrative"
+            visibility={panelVisibility.narrative}
+            themeColor={panelColors.narrative}
             compact={true}
-          />
-        </div>
-      )}
+            highlight={isPanelPrimary('narrative', panelVisibility) && highlightDecision}
+          >
+            <MinimalErrorBoundary panelName="Hand Narrative" compact={true}>
+              <HandNarrativePanel
+                events={safeEvents}
+                currentIndex={viewModel.index}
+                players={viewModel.snapshot.players}
+                title="Hand Narrative"
+                compact={true}
+              />
+            </MinimalErrorBoundary>
+          </CollapsiblePanel>
 
-      {/* ================================================================ */}
-      {/* 【Post-Freeze】Hand Analytics Panel */}
-      {/* ================================================================ */}
-      {events && events.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <HandAnalyticsPanel
-            events={events}
-            players={viewModel.snapshot.players}
-            streets={[]}
-            title="Hand Analytics"
-            compact={true}
-          />
-        </div>
-      )}
-
-      {/* ================================================================ */}
-      {/* 【Post-Freeze】Decision Insight Panel */}
-      {/* ================================================================ */}
-      {events && events.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <DecisionInsightPanel
-            events={events}
-            players={viewModel.snapshot.players}
-            currentIndex={viewModel.index}
-            title="Decision Insights"
-            compact={true}
-          />
-        </div>
-      )}
-
-      {/* ================================================================ */}
-      {/* 【Post-Freeze】Decision Comparison Panel */}
-      {/* ================================================================ */}
-      {events && events.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <DecisionComparisonPanel
-            events={events}
-            players={viewModel.snapshot.players}
-            currentIndex={viewModel.index}
+          {/* Comparison Panel - Primary when hero decision */}
+          <CollapsiblePanel
             title="Decision Comparison"
+            visibility={panelVisibility.comparison}
+            themeColor={panelColors.comparison}
             compact={true}
-          />
+            highlight={isPanelPrimary('comparison', panelVisibility) && highlightDecision}
+          >
+            <MinimalErrorBoundary panelName="Decision Comparison" compact={true}>
+              <DecisionComparisonPanel
+                events={safeEvents}
+                players={viewModel.snapshot.players}
+                currentIndex={viewModel.index}
+                title="Decision Comparison"
+                compact={true}
+              />
+            </MinimalErrorBoundary>
+          </CollapsiblePanel>
+
+          {/* Insight Panel - Primary when hand ends */}
+          <CollapsiblePanel
+            title="Decision Insights"
+            visibility={panelVisibility.insight}
+            themeColor={panelColors.insight}
+            compact={true}
+            highlight={isPanelPrimary('insight', panelVisibility)}
+          >
+            <MinimalErrorBoundary panelName="Decision Insights" compact={true}>
+              <DecisionInsightPanel
+                events={safeEvents}
+                players={viewModel.snapshot.players}
+                currentIndex={viewModel.index}
+                title="Decision Insights"
+                compact={true}
+              />
+            </MinimalErrorBoundary>
+          </CollapsiblePanel>
+
+          {/* Alignment Panel - Primary when hand ends (with insight) */}
+          <CollapsiblePanel
+            title="Strategy Alignment"
+            visibility={panelVisibility.alignment}
+            themeColor={panelColors.alignment}
+            compact={true}
+            highlight={isPanelPrimary('alignment', panelVisibility)}
+          >
+            <MinimalErrorBoundary panelName="Strategy Alignment" compact={true}>
+              <StrategyAlignmentPanel
+                events={safeEvents}
+                players={viewModel.snapshot.players}
+                currentIndex={viewModel.index}
+                heroSeat={0}
+                title="Strategy Alignment"
+                compact={true}
+              />
+            </MinimalErrorBoundary>
+          </CollapsiblePanel>
         </div>
       )}
 
       {/* ================================================================ */}
-      {/* 【Post-Freeze】Strategy Alignment Panel */}
+      {/* 【Phase 4】Secondary Panels Group - 辅助面板组 */}
       {/* ================================================================ */}
-      {events && events.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <StrategyAlignmentPanel
-            events={events}
-            players={viewModel.snapshot.players}
-            currentIndex={viewModel.index}
-            heroSeat={0}
-            title="Strategy Alignment"
+      {safeEvents.length > 0 && (
+        <PanelGroup title="Additional Analysis" compact={true}>
+          {/* Hand Analytics */}
+          <CollapsiblePanel
+            title="Hand Analytics"
+            visibility="collapsed"
+            themeColor="#f59e0b"
             compact={true}
-          />
-        </div>
+          >
+            <HandAnalyticsPanel
+              events={safeEvents}
+              players={viewModel.snapshot.players}
+              streets={[]}
+              title="Hand Analytics"
+              compact={true}
+            />
+          </CollapsiblePanel>
+        </PanelGroup>
       )}
 
       {/* ================================================================ */}

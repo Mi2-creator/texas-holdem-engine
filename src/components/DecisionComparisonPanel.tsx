@@ -1241,9 +1241,16 @@ export function DecisionComparisonPanel({
   compact = false,
 }: DecisionComparisonPanelProps) {
   // ========================================
+  // 【防御入口】统一防御层 - 防止 undefined/null 访问
+  // ========================================
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safePlayers = Array.isArray(players) ? players : [];
+  const safeCurrentIndex = typeof currentIndex === 'number' && currentIndex >= 0 ? currentIndex : 0;
+
+  // ========================================
   // 边界检查：无事件时显示空状态
   // ========================================
-  if (events.length === 0) {
+  if (safeEvents.length === 0) {
     return (
       <div
         style={{
@@ -1264,14 +1271,14 @@ export function DecisionComparisonPanel({
   // ========================================
   // 从 DecisionTimelineModel 构建数据
   // ========================================
-  const playerInfos: PlayerInfo[] = players.map(p => ({
-    id: p.id,
-    name: p.name,
-    seat: p.seat,
+  const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+    id: p?.id ?? '',
+    name: p?.name ?? 'Unknown',
+    seat: p?.seat,
   }));
 
-  const timeline = buildDecisionTimeline(events, playerInfos, 0);
-  const decision = getDecisionAtIndex(timeline, currentIndex);
+  const timeline = buildDecisionTimeline(safeEvents, playerInfos, 0);
+  const decision = getDecisionAtIndex(timeline, safeCurrentIndex);
 
   // ========================================
   // 无决策点时显示提示
@@ -1298,7 +1305,7 @@ export function DecisionComparisonPanel({
   // 从 DecisionPoint 派生显示数据
   // ========================================
   const decisionOptions = buildDecisionOptions(decision);
-  const context = buildDecisionContext(decision, events, currentIndex);
+  const context = buildDecisionContext(decision, safeEvents, safeCurrentIndex);
 
   // ========================================
   // 纯展示渲染
@@ -1431,9 +1438,9 @@ export function DecisionComparisonPanel({
           >
             Extended Comparison Views
           </div>
-          <TimelineComparisonView timeline={timeline} currentIndex={currentIndex} compact={compact} />
-          <RiskSpectrumView timeline={timeline} currentIndex={currentIndex} compact={compact} />
-          <ActionBreakdownView timeline={timeline} currentIndex={currentIndex} compact={compact} />
+          <TimelineComparisonView timeline={timeline} currentIndex={safeCurrentIndex} compact={compact} />
+          <RiskSpectrumView timeline={timeline} currentIndex={safeCurrentIndex} compact={compact} />
+          <ActionBreakdownView timeline={timeline} currentIndex={safeCurrentIndex} compact={compact} />
         </div>
       </div>
 

@@ -917,9 +917,17 @@ export function StrategyAlignmentPanel({
   compact = false,
 }: StrategyAlignmentPanelProps) {
   // ========================================
+  // 【防御入口】统一防御层 - 防止 undefined/null 访问
+  // ========================================
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safePlayers = Array.isArray(players) ? players : [];
+  const safeCurrentIndex = typeof currentIndex === 'number' && currentIndex >= 0 ? currentIndex : 0;
+  const safeHeroSeat = typeof heroSeat === 'number' && heroSeat >= 0 ? heroSeat : 0;
+
+  // ========================================
   // 边界检查：无事件时显示空状态
   // ========================================
-  if (events.length === 0) {
+  if (safeEvents.length === 0) {
     return (
       <div
         style={{
@@ -940,14 +948,14 @@ export function StrategyAlignmentPanel({
   // ========================================
   // 从 DecisionTimelineModel 构建数据
   // ========================================
-  const playerInfos: PlayerInfo[] = players.map(p => ({
-    id: p.id,
-    name: p.name,
-    seat: p.seat,
+  const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+    id: p?.id ?? '',
+    name: p?.name ?? 'Unknown',
+    seat: p?.seat,
   }));
 
-  const timeline = buildDecisionTimeline(events, playerInfos, heroSeat);
-  const decision = getDecisionAtIndex(timeline, currentIndex);
+  const timeline = buildDecisionTimeline(safeEvents, playerInfos, safeHeroSeat);
+  const decision = getDecisionAtIndex(timeline, safeCurrentIndex);
 
   // ========================================
   // 无决策点或非 Hero 决策时显示提示
@@ -984,7 +992,7 @@ export function StrategyAlignmentPanel({
           textAlign: 'center',
         }}
       >
-        Current event is not a hero decision point (seat {heroSeat})
+        Current event is not a hero decision point (seat {safeHeroSeat})
       </div>
     );
   }
@@ -1254,7 +1262,7 @@ export function StrategyAlignmentPanel({
         {/* Hero Alignment History */}
         <AlignmentHistoryView
           timeline={timeline}
-          heroSeat={heroSeat}
+          heroSeat={safeHeroSeat}
           compact={compact}
         />
 

@@ -61,7 +61,7 @@ import {
   generateHandAnalysisReport,
   type VolatilityMetrics,
   type RiskEscalationPoint,
-  type BettingPatternResult,
+  type BettingPattern,
   type StreetAnalysis,
   type HandAnalysisReport,
 } from '../models/DecisionTimelineQueries';
@@ -203,20 +203,31 @@ function getCardsForStreet(street: string, allCards: readonly CardInfo[]): reado
 /**
  * 从 DecisionPoint 提取叙事描述
  * 使用 DecisionTimelineModel 的 narrative context
+ * 防御性：确保 decision 和 narrative 存在
  */
-function getDecisionNarrative(decision: DecisionPoint): string {
-  return decision.narrative.sentence;
+function getDecisionNarrative(decision: DecisionPoint | null | undefined): string {
+  if (!decision) return '';
+  const narrative = decision.narrative;
+  if (!narrative) return '';
+  return typeof narrative.sentence === 'string' ? narrative.sentence : '';
 }
 
 /**
  * 按街道分组决策点
+ * 防御性：确保 timeline 是有效数组
  */
 function groupDecisionsByStreet(
   timeline: DecisionTimeline
 ): Map<StreetPhase, readonly DecisionPoint[]> {
   const groups = new Map<StreetPhase, DecisionPoint[]>();
 
+  // 防御性检查
+  if (!Array.isArray(timeline)) return groups;
+
   for (const decision of timeline) {
+    // 防御性检查每个 decision
+    if (!decision || typeof decision.street !== 'string') continue;
+
     const street = decision.street;
     if (!groups.has(street)) {
       groups.set(street, []);
@@ -230,6 +241,7 @@ function groupDecisionsByStreet(
 /**
  * 生成手牌叙事（纯函数）
  * 使用 DecisionTimeline 作为决策数据源
+ * 防御性：确保所有输入参数有效
  */
 function generateNarrative(
   events: readonly NarrativeEventInfo[],
@@ -238,7 +250,14 @@ function generateNarrative(
   timeline: DecisionTimeline
 ): readonly NarrativeParagraph[] {
   const paragraphs: NarrativeParagraph[] = [];
-  const relevantEvents = events.slice(0, currentIndex + 1);
+
+  // 防御性检查：确保 events 是有效数组
+  if (!Array.isArray(events) || events.length === 0) {
+    return paragraphs;
+  }
+
+  const safeIndex = typeof currentIndex === 'number' && currentIndex >= 0 ? currentIndex : 0;
+  const relevantEvents = events.slice(0, safeIndex + 1);
 
   if (relevantEvents.length === 0) {
     return paragraphs;
@@ -255,6 +274,9 @@ function generateNarrative(
 
   // Process events for non-decision narrative elements
   for (const event of relevantEvents) {
+    // 防御性检查：确保 event 存在且有 type
+    if (!event || typeof event.type !== 'string') continue;
+
     switch (event.type) {
       case 'HAND_START':
         handStarted = true;
@@ -265,7 +287,7 @@ function generateNarrative(
         break;
 
       case 'DEAL_COMMUNITY':
-        if (event.cards) {
+        if (Array.isArray(event.cards)) {
           communityCards = [...communityCards, ...event.cards];
         }
         break;
@@ -278,10 +300,10 @@ function generateNarrative(
 
       case 'HAND_END':
         handEnded = true;
-        if (event.winners) {
+        if (Array.isArray(event.winners)) {
           winnersInfo = [...event.winners];
         }
-        if (event.reason) {
+        if (typeof event.reason === 'string') {
           handEndReason = event.reason;
         }
         break;
@@ -320,7 +342,9 @@ function generateNarrative(
   }
 
   // Generate street paragraphs using DecisionTimeline
-  const decisionsByStreet = groupDecisionsByStreet(timeline);
+  // 防御性检查：确保 timeline 是有效数组
+  const safeTimeline = Array.isArray(timeline) ? timeline : [];
+  const decisionsByStreet = groupDecisionsByStreet(safeTimeline);
   const streetOrder: StreetPhase[] = ['PREFLOP', 'FLOP', 'TURN', 'RIVER'];
 
   for (const street of streetOrder) {
@@ -328,13 +352,19 @@ function generateNarrative(
     if (!decisions || decisions.length === 0) continue;
 
     // Filter decisions within current index range
-    const relevantDecisions = decisions.filter(d => d.index <= currentIndex);
+    const relevantDecisions = decisions.filter(d => d && typeof d.index === 'number' && d.index <= safeIndex);
     if (relevantDecisions.length === 0) continue;
 
     // Get action sentences from DecisionTimeline narrative context
+    // 防御性：过滤空字符串
     const actions = relevantDecisions
-      .filter(d => d.actionClass !== 'post-blind') // Blinds handled separately
-      .map(d => getDecisionNarrative(d).replace(/\.$/, '')); // Remove trailing period
+      .filter(d => d?.actionClass !== 'post-blind') // Blinds handled separately
+      .map(d => {
+        const narrative = getDecisionNarrative(d);
+        // 防御性：确保 narrative 是字符串
+        return typeof narrative === 'string' ? narrative.replace(/\.$/, '') : '';
+      })
+      .filter(a => a.length > 0); // 过滤空字符串
 
     if (actions.length === 0) continue;
 
@@ -350,14 +380,21 @@ function generateNarrative(
     }
 
     // Build prose from action sentences
+    // 防御性：安全访问字符串
+    const safeCharAt = (s: string | undefined, fallback: string = ''): string => {
+      if (!s || s.length === 0) return fallback;
+      return s.charAt(0).toLowerCase() + s.slice(1);
+    };
+
     if (actions.length === 1) {
-      streetText += `On ${streetName}, ${actions[0].charAt(0).toLowerCase() + actions[0].slice(1)}.`;
+      streetText += `On ${streetName}, ${safeCharAt(actions[0])}.`;
     } else if (actions.length === 2) {
-      streetText += `On ${streetName}, ${actions[0].charAt(0).toLowerCase() + actions[0].slice(1)}, then ${actions[1].charAt(0).toLowerCase() + actions[1].slice(1)}.`;
+      streetText += `On ${streetName}, ${safeCharAt(actions[0])}, then ${safeCharAt(actions[1])}.`;
     } else {
-      const lastAction = actions[actions.length - 1];
-      const otherActions = actions.slice(0, -1).map(a => a.charAt(0).toLowerCase() + a.slice(1)).join(', ');
-      streetText += `On ${streetName}, ${otherActions}, and finally ${lastAction.charAt(0).toLowerCase() + lastAction.slice(1)}.`;
+      // actions.length >= 3，安全访问最后一个元素
+      const lastAction = actions[actions.length - 1] ?? '';
+      const otherActions = actions.slice(0, -1).map(a => safeCharAt(a)).join(', ');
+      streetText += `On ${streetName}, ${otherActions}, and finally ${safeCharAt(lastAction)}.`;
     }
 
     paragraphs.push({
@@ -371,26 +408,37 @@ function generateNarrative(
     let conclusionText = '';
     if (winnersInfo.length === 1) {
       const winner = winnersInfo[0];
-      const winnerName = getPlayerName(winner.playerId, playerNames);
-      const handInfo = winner.handRank ? ` with ${winner.handRank}` : '';
-      if (handEndReason === 'ALL_FOLD') {
-        conclusionText = `${winnerName} takes the pot of $${winner.amount} as all opponents have folded.`;
-      } else {
-        conclusionText = `${winnerName} wins the pot of $${winner.amount}${handInfo}.`;
+      // 防御性检查 winner 对象
+      if (winner) {
+        const winnerName = getPlayerName(winner.playerId ?? '', playerNames);
+        const winnerAmount = typeof winner.amount === 'number' ? winner.amount : 0;
+        const handInfo = typeof winner.handRank === 'string' ? ` with ${winner.handRank}` : '';
+        if (handEndReason === 'ALL_FOLD') {
+          conclusionText = `${winnerName} takes the pot of $${winnerAmount} as all opponents have folded.`;
+        } else {
+          conclusionText = `${winnerName} wins the pot of $${winnerAmount}${handInfo}.`;
+        }
       }
     } else {
-      const winnerDescs = winnersInfo.map(w => {
-        const name = getPlayerName(w.playerId, playerNames);
-        const handInfo = w.handRank ? ` (${w.handRank})` : '';
-        return `${name} wins $${w.amount}${handInfo}`;
-      });
-      conclusionText = `The pot is split: ${winnerDescs.join('; ')}.`;
+      const winnerDescs = winnersInfo
+        .filter(w => w != null) // 防御性过滤
+        .map(w => {
+          const name = getPlayerName(w.playerId ?? '', playerNames);
+          const amount = typeof w.amount === 'number' ? w.amount : 0;
+          const handInfo = typeof w.handRank === 'string' ? ` (${w.handRank})` : '';
+          return `${name} wins $${amount}${handInfo}`;
+        });
+      if (winnerDescs.length > 0) {
+        conclusionText = `The pot is split: ${winnerDescs.join('; ')}.`;
+      }
     }
-    paragraphs.push({
-      type: 'conclusion',
-      text: conclusionText,
-      highlight: true,
-    });
+    if (conclusionText) {
+      paragraphs.push({
+        type: 'conclusion',
+        text: conclusionText,
+        highlight: true,
+      });
+    }
   }
 
   // Add drama elements for all-in
@@ -467,16 +515,25 @@ function calculateStoryArc(
   handEnded: boolean
 ): StoryArc {
   if (handEnded) return 'resolution';
-  if (escalation.length === 0) return 'flat';
+  if (!escalation || escalation.length === 0) return 'flat';
 
   const lastPoint = escalation[escalation.length - 1];
   const midPoint = escalation[Math.floor(escalation.length / 2)];
 
-  if (lastPoint.cumulativeRisk > 70) return 'climax';
-  if (lastPoint.cumulativeRisk > midPoint.cumulativeRisk) return 'rising';
-  if (lastPoint.cumulativeRisk < midPoint.cumulativeRisk) return 'falling';
+  // Defensive: ensure points exist before accessing properties
+  if (!lastPoint || !midPoint) return 'flat';
 
-  return volatility.volatilityScore > 50 ? 'rising' : 'flat';
+  // Defensive: ensure cumulativeRisk exists
+  const lastRisk = typeof lastPoint.cumulativeRisk === 'number' ? lastPoint.cumulativeRisk : 0;
+  const midRisk = typeof midPoint.cumulativeRisk === 'number' ? midPoint.cumulativeRisk : 0;
+
+  if (lastRisk > 70) return 'climax';
+  if (lastRisk > midRisk) return 'rising';
+  if (lastRisk < midRisk) return 'falling';
+
+  // Defensive: check volatility exists
+  const volScore = typeof volatility?.volatilityScore === 'number' ? volatility.volatilityScore : 0;
+  return volScore > 50 ? 'rising' : 'flat';
 }
 
 /**
@@ -523,6 +580,11 @@ function DramaticArcView({
   const arc = calculateStoryArc(volatility, escalation, handEnded);
   const arcColor = getArcColor(arc);
   const arcDesc = getArcDescriptor(arc);
+
+  // Defensive: extract with fallbacks
+  const volatilityScore = typeof volatility?.volatilityScore === 'number' ? volatility.volatilityScore : 0;
+  const volatilityLabel = typeof volatility?.volatilityLabel === 'string' ? volatility.volatilityLabel : 'stable';
+  const tensionPercent = Math.min(100, Math.max(0, volatilityScore));
 
   return (
     <div
@@ -578,7 +640,7 @@ function DramaticArcView({
       >
         <div
           style={{
-            width: `${volatility.volatilityScore}%`,
+            width: `${tensionPercent}%`,
             height: '100%',
             background: `linear-gradient(90deg, #22c55e, ${arcColor})`,
             transition: 'width 0.3s ease',
@@ -594,8 +656,8 @@ function DramaticArcView({
           color: '#888',
         }}
       >
-        <span>Tension: {volatility.volatilityScore}%</span>
-        <span>Peak Decision: {volatility.peakDecisionIndex + 1}</span>
+        <span>Tension: {tensionPercent}%</span>
+        <span>State: {volatilityLabel}</span>
       </div>
     </div>
   );
@@ -612,10 +674,19 @@ function KeyMomentsView({
   aggressive,
   compact = false,
 }: KeyMomentsViewProps) {
+  // 防御性检查：确保输入是有效数组
+  const safeTurningPoints = Array.isArray(turningPoints) ? turningPoints : [];
+  const safeAggressive = Array.isArray(aggressive) ? aggressive : [];
+
   const keyMoments = [
-    ...turningPoints.map(tp => ({ ...tp, momentType: 'turning' as const })),
-    ...aggressive.slice(0, 3).map(a => ({ ...a, momentType: 'aggressive' as const })),
-  ].sort((a, b) => a.index - b.index);
+    ...safeTurningPoints.filter(tp => tp != null).map(tp => ({ ...tp, momentType: 'turning' as const })),
+    ...safeAggressive.slice(0, 3).filter(a => a != null).map(a => ({ ...a, momentType: 'aggressive' as const })),
+  ].sort((a, b) => {
+    // 防御性排序：确保 index 是数字
+    const aIndex = typeof a.index === 'number' ? a.index : 0;
+    const bIndex = typeof b.index === 'number' ? b.index : 0;
+    return aIndex - bIndex;
+  });
 
   if (keyMoments.length === 0) {
     return (
@@ -686,9 +757,11 @@ function KeyMomentsView({
                   color: '#d0d0d0',
                 }}
               >
-                <strong style={{ color: '#f472b6' }}>{moment.playerName}</strong>{' '}
-                {moment.actionClass}
-                {moment.amount ? ` $${moment.amount}` : ''}
+                <strong style={{ color: '#f472b6' }}>
+                  {typeof moment.playerName === 'string' ? moment.playerName : 'Unknown'}
+                </strong>{' '}
+                {typeof moment.actionClass === 'string' ? moment.actionClass : 'action'}
+                {typeof moment.amount === 'number' && moment.amount > 0 ? ` $${moment.amount}` : ''}
               </span>
               <span
                 style={{
@@ -697,7 +770,7 @@ function KeyMomentsView({
                   color: '#888',
                 }}
               >
-                {moment.street}
+                {typeof moment.street === 'string' ? moment.street : ''}
               </span>
             </div>
           );
@@ -716,7 +789,9 @@ function StreetSummaryView({
   streetAnalyses,
   compact = false,
 }: StreetSummaryViewProps) {
-  if (streetAnalyses.length === 0) return null;
+  // 防御性检查：确保输入是有效数组
+  const safeStreetAnalyses = Array.isArray(streetAnalyses) ? streetAnalyses : [];
+  if (safeStreetAnalyses.length === 0) return null;
 
   return (
     <div style={{ marginBottom: compact ? 12 : 16 }}>
@@ -733,14 +808,23 @@ function StreetSummaryView({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 4 : 6 }}>
-        {streetAnalyses.map((analysis, idx) => {
+        {safeStreetAnalyses.map((analysis, idx) => {
+          // 防御性检查：确保 analysis 存在
+          if (!analysis) return null;
+
           const streetColors: Record<string, string> = {
             PREFLOP: '#3b82f6',
             FLOP: '#06b6d4',
             TURN: '#f59e0b',
             RIVER: '#ef4444',
           };
-          const color = streetColors[analysis.street] ?? '#888';
+          const streetValue = typeof analysis.street === 'string' ? analysis.street : '';
+          const color = streetColors[streetValue] ?? '#888';
+
+          // Defensive: extract fields with fallbacks
+          const decisionCount = typeof analysis.decisionCount === 'number' ? analysis.decisionCount : 0;
+          const aggressionRate = typeof analysis.aggressionRate === 'number' ? analysis.aggressionRate : 0;
+          const alignmentRate = typeof analysis.alignmentRate === 'number' ? analysis.alignmentRate : 0;
 
           return (
             <div
@@ -763,7 +847,7 @@ function StreetSummaryView({
                   textTransform: 'uppercase',
                 }}
               >
-                {analysis.street}
+                {streetValue || 'UNKNOWN'}
               </span>
               <span
                 style={{
@@ -771,24 +855,24 @@ function StreetSummaryView({
                   color: '#9ca3af',
                 }}
               >
-                {analysis.decisionCount} actions
+                {decisionCount} actions
               </span>
               <span
                 style={{
                   fontSize: compact ? 9 : 10,
-                  color: analysis.aggressiveCount > analysis.passiveCount ? '#f59e0b' : '#3b82f6',
+                  color: aggressionRate > 50 ? '#f59e0b' : '#3b82f6',
                 }}
               >
-                {analysis.aggressiveCount}A / {analysis.passiveCount}P
+                Aggr: {Math.round(aggressionRate)}%
               </span>
               <span
                 style={{
                   marginLeft: 'auto',
                   fontSize: compact ? 8 : 9,
-                  color: analysis.potGrowth > 50 ? '#f59e0b' : '#888',
+                  color: alignmentRate > 70 ? '#22c55e' : '#888',
                 }}
               >
-                Pot +{analysis.potGrowth}%
+                Align: {Math.round(alignmentRate)}%
               </span>
             </div>
           );
@@ -799,7 +883,7 @@ function StreetSummaryView({
 }
 
 interface PatternNarrativeViewProps {
-  readonly pattern: BettingPatternResult | null;
+  readonly pattern: BettingPattern | null;
   readonly compact?: boolean;
 }
 
@@ -807,6 +891,7 @@ function PatternNarrativeView({
   pattern,
   compact = false,
 }: PatternNarrativeViewProps) {
+  // Defensive: pattern is null or undefined
   if (!pattern) {
     return (
       <div
@@ -825,14 +910,28 @@ function PatternNarrativeView({
     );
   }
 
+  // Defensive: extract fields with fallbacks (BettingPattern uses patternType, patternDescription, supportingEvidence)
+  const patternName = typeof pattern.patternType === 'string' ? pattern.patternType : 'balanced';
+  const confidenceLevel = typeof pattern.confidence === 'string' ? pattern.confidence : 'low';
+  const description = typeof pattern.patternDescription === 'string' ? pattern.patternDescription : 'Pattern analysis unavailable';
+  const indicators = Array.isArray(pattern.supportingEvidence) ? pattern.supportingEvidence : [];
+
   const patternColors: Record<string, string> = {
     'value-heavy': '#22c55e',
     'bluff-heavy': '#ef4444',
     'balanced': '#3b82f6',
+    'polarized': '#f59e0b',
+    'merged': '#a78bfa',
     'passive': '#6b7280',
     'unknown': '#888',
   };
-  const color = patternColors[pattern.pattern];
+  const color = patternColors[patternName] || '#888';
+
+  // Confidence display (string to readable format)
+  const confidenceDisplay = confidenceLevel.charAt(0).toUpperCase() + confidenceLevel.slice(1);
+
+  // Defensive: format pattern name safely
+  const displayPatternName = patternName.replace(/-/g, ' ');
 
   return (
     <div style={{ marginBottom: compact ? 12 : 16 }}>
@@ -875,7 +974,7 @@ function PatternNarrativeView({
               textTransform: 'uppercase',
             }}
           >
-            {pattern.pattern.replace('-', ' ')}
+            {displayPatternName}
           </span>
           <span
             style={{
@@ -883,7 +982,7 @@ function PatternNarrativeView({
               color: '#888',
             }}
           >
-            Confidence: {pattern.confidence}%
+            Confidence: {confidenceDisplay}
           </span>
         </div>
 
@@ -894,32 +993,34 @@ function PatternNarrativeView({
             lineHeight: 1.5,
           }}
         >
-          {pattern.description}
+          {description}
         </div>
 
         {/* Pattern indicators */}
-        <div
-          style={{
-            display: 'flex',
-            gap: compact ? 6 : 8,
-            marginTop: compact ? 8 : 10,
-          }}
-        >
-          {pattern.indicators.slice(0, 3).map((indicator, idx) => (
-            <span
-              key={idx}
-              style={{
-                padding: '2px 6px',
-                background: 'rgba(100, 100, 100, 0.2)',
-                borderRadius: 3,
-                fontSize: compact ? 8 : 9,
-                color: '#aaa',
-              }}
-            >
-              {indicator}
-            </span>
-          ))}
-        </div>
+        {indicators.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              gap: compact ? 6 : 8,
+              marginTop: compact ? 8 : 10,
+            }}
+          >
+            {indicators.slice(0, 3).map((indicator, idx) => (
+              <span
+                key={idx}
+                style={{
+                  padding: '2px 6px',
+                  background: 'rgba(100, 100, 100, 0.2)',
+                  borderRadius: 3,
+                  fontSize: compact ? 8 : 9,
+                  color: '#aaa',
+                }}
+              >
+                {typeof indicator === 'string' ? indicator : String(indicator)}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -934,6 +1035,11 @@ function HandReportSummaryView({
   report,
   compact = false,
 }: HandReportSummaryViewProps) {
+  // Defensive: extract fields with fallbacks
+  const overallSummary = typeof report.overallSummary === 'string' ? report.overallSummary : 'No summary available';
+  const leaks = Array.isArray(report.leaks) ? report.leaks : [];
+  const turningPoints = Array.isArray(report.turningPoints) ? report.turningPoints : [];
+
   return (
     <div style={{ marginBottom: compact ? 12 : 16 }}>
       <div
@@ -948,7 +1054,7 @@ function HandReportSummaryView({
         Hand Analysis Summary
       </div>
 
-      {/* Overview */}
+      {/* Overall Summary */}
       <div
         style={{
           padding: compact ? '10px 12px' : '12px 14px',
@@ -966,12 +1072,12 @@ function HandReportSummaryView({
             fontStyle: 'italic',
           }}
         >
-          "{report.overview}"
+          "{overallSummary}"
         </div>
       </div>
 
-      {/* Key Insights */}
-      {report.keyInsights.length > 0 && (
+      {/* Potential Leaks */}
+      {leaks.length > 0 && (
         <div style={{ marginBottom: compact ? 8 : 10 }}>
           <div
             style={{
@@ -981,10 +1087,10 @@ function HandReportSummaryView({
               marginBottom: compact ? 4 : 6,
             }}
           >
-            Key Insights
+            Potential Leaks Identified
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {report.keyInsights.slice(0, 4).map((insight, idx) => (
+            {leaks.slice(0, 4).map((leak, idx) => (
               <div
                 key={idx}
                 style={{
@@ -995,16 +1101,16 @@ function HandReportSummaryView({
                   color: '#9ca3af',
                 }}
               >
-                <span style={{ color: '#22c55e' }}>•</span>
-                <span>{insight}</span>
+                <span style={{ color: '#f59e0b' }}>•</span>
+                <span>{typeof leak.description === 'string' ? leak.description : 'Unknown leak'}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Recommendations */}
-      {report.recommendations.length > 0 && (
+      {/* Turning Points */}
+      {turningPoints.length > 0 && (
         <div>
           <div
             style={{
@@ -1014,24 +1120,32 @@ function HandReportSummaryView({
               marginBottom: compact ? 4 : 6,
             }}
           >
-            Recommendations
+            Key Turning Points
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {report.recommendations.slice(0, 3).map((rec, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 6,
-                  fontSize: compact ? 10 : 11,
-                  color: '#9ca3af',
-                }}
-              >
-                <span style={{ color: '#f59e0b' }}>→</span>
-                <span>{rec}</span>
-              </div>
-            ))}
+            {turningPoints.slice(0, 3).map((point, idx) => {
+              // 防御性检查：确保 point 存在且有必要属性
+              if (!point) return null;
+              const streetValue = typeof point.street === 'string' ? point.street : '';
+              const actionValue = typeof point.actionClass === 'string' ? point.actionClass : 'action';
+              const playerValue = typeof point.playerName === 'string' ? point.playerName : 'Unknown';
+
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 6,
+                    fontSize: compact ? 10 : 11,
+                    color: '#9ca3af',
+                  }}
+                >
+                  <span style={{ color: '#22c55e' }}>→</span>
+                  <span>{streetValue}: {actionValue} by {playerValue}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1052,9 +1166,16 @@ export function HandNarrativePanel({
   maxParagraphs = 10,
 }: HandNarrativePanelProps) {
   // ========================================
+  // 防御性检查：确保 events 和 players 是有效数组
+  // ========================================
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safePlayers = Array.isArray(players) ? players : [];
+  const safeCurrentIndex = typeof currentIndex === 'number' && currentIndex >= 0 ? currentIndex : 0;
+
+  // ========================================
   // 边界检查：无事件时显示空状态
   // ========================================
-  if (events.length === 0) {
+  if (safeEvents.length === 0) {
     return (
       <div
         style={{
@@ -1075,32 +1196,38 @@ export function HandNarrativePanel({
   // ========================================
   // 从 DecisionTimelineModel 构建数据
   // ========================================
-  const playerInfos: PlayerInfo[] = players.map(p => ({
-    id: p.id,
-    name: p.name,
-    seat: p.seat,
+  const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+    id: p?.id ?? '',
+    name: p?.name ?? 'Unknown',
+    seat: p?.seat,
   }));
 
   const playerNames = buildPlayerNameMap(playerInfos);
-  const timeline = buildDecisionTimeline(events, playerInfos, 0);
+  const timeline = buildDecisionTimeline(safeEvents, playerInfos, 0);
+  const safeTimeline = Array.isArray(timeline) ? timeline : [];
 
   // ========================================
   // 纯函数计算：生成叙事段落
   // ========================================
-  const paragraphs = generateNarrative(events, currentIndex, playerNames, timeline);
+  const paragraphs = generateNarrative(safeEvents, safeCurrentIndex, playerNames, safeTimeline);
   const displayParagraphs = paragraphs.slice(-maxParagraphs);
 
   // ========================================
   // Extended Analytics (Feature Expansion)
+  // 所有分析函数对空数组都有防御处理，但这里仍用 safeTimeline 以确保一致性
   // ========================================
-  const volatility = calculateVolatilityMetrics(timeline);
-  const escalation = calculateRiskEscalationCurve(timeline);
-  const turningPoints = getTurningPointDecisions(timeline);
-  const aggressive = getAggressiveDecisions(timeline);
-  const pattern = detectBettingPattern(timeline);
-  const streetAnalyses = analyzeByStreet(timeline);
-  const report = generateHandAnalysisReport(timeline);
-  const handEnded = events.some(e => e.type === 'HAND_END' && events.indexOf(e) <= currentIndex);
+  const volatility = calculateVolatilityMetrics(safeTimeline);
+  const escalation = calculateRiskEscalationCurve(safeTimeline);
+  const turningPoints = getTurningPointDecisions(safeTimeline);
+  const aggressive = getAggressiveDecisions(safeTimeline);
+  const pattern = detectBettingPattern(safeTimeline);
+  const streetAnalyses = analyzeByStreet(safeTimeline);
+  const report = generateHandAnalysisReport(safeTimeline);
+
+  // 防御性检查 handEnded
+  const handEnded = safeEvents.some((e, idx) =>
+    e?.type === 'HAND_END' && idx <= safeCurrentIndex
+  );
 
   // 空叙事状态
   if (displayParagraphs.length === 0) {
@@ -1222,7 +1349,7 @@ export function HandNarrativePanel({
         {/* ================================================================ */}
 
         {/* Dramatic Arc */}
-        {timeline.length > 0 && (
+        {safeTimeline.length > 0 && (
           <div
             style={{
               marginTop: compact ? 14 : 18,
@@ -1232,7 +1359,7 @@ export function HandNarrativePanel({
           >
             <DramaticArcView
               volatility={volatility}
-              escalation={escalation}
+              escalation={escalation.points}
               handEnded={handEnded}
               compact={compact}
             />
@@ -1253,7 +1380,7 @@ export function HandNarrativePanel({
         <PatternNarrativeView pattern={pattern} compact={compact} />
 
         {/* Hand Analysis Report (shown when hand ends) */}
-        {handEnded && report.totalDecisions > 0 && (
+        {handEnded && report && report.overallSummary && (
           <div
             style={{
               marginTop: compact ? 14 : 18,
