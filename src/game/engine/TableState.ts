@@ -143,17 +143,23 @@ export function getCurrentPlayer(state: TableState): Player | null {
 }
 
 /**
- * Get small blind position (left of dealer)
+ * Get small blind position
+ * Heads-up: dealer is SB
+ * 3+ players: left of dealer is SB
  */
 export function getSmallBlindIndex(state: TableState): number {
-  return (state.dealerIndex + 1) % state.players.length;
+  const numPlayers = state.players.length;
+  return numPlayers === 2
+    ? state.dealerIndex
+    : (state.dealerIndex + 1) % numPlayers;
 }
 
 /**
  * Get big blind position (left of small blind)
  */
 export function getBigBlindIndex(state: TableState): number {
-  return (state.dealerIndex + 2) % state.players.length;
+  const sbIndex = getSmallBlindIndex(state);
+  return (sbIndex + 1) % state.players.length;
 }
 
 /**

@@ -32,7 +32,9 @@ interface LiveGameProps {
   readonly config?: Partial<GameConfig>;
 }
 
-type GamePhase = 'idle' | 'playing' | 'waiting-for-action' | 'complete';
+type GamePhase = 'idle' | 'playing' | 'waiting-for-action' | 'complete' | 'game-over';
+
+const AUTO_DEAL_DELAY = 3000; // 3 seconds before auto-dealing next hand
 
 // ============================================================================
 // Styles
@@ -125,6 +127,45 @@ const styles = {
     padding: '4px 0',
     borderBottom: '1px solid rgba(75, 85, 99, 0.2)',
   },
+
+  countdown: {
+    fontSize: '12px',
+    color: 'rgba(156, 163, 175, 0.7)',
+    marginTop: '12px',
+  },
+
+  gameOverPanel: {
+    padding: '32px 48px',
+    borderRadius: '16px',
+    backgroundColor: 'rgba(20, 20, 28, 0.98)',
+    border: '2px solid rgba(234, 179, 8, 0.4)',
+    textAlign: 'center' as const,
+  },
+
+  gameOverTitle: {
+    fontSize: '24px',
+    fontWeight: 700,
+    color: '#eab308',
+    marginBottom: '16px',
+  },
+
+  gameOverInfo: {
+    fontSize: '16px',
+    color: 'rgba(209, 213, 219, 0.9)',
+    marginBottom: '24px',
+  },
+
+  restartButton: {
+    padding: '12px 32px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(234, 179, 8, 0.2)',
+    color: '#eab308',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    border: '1px solid rgba(234, 179, 8, 0.3)',
+  },
 };
 
 // ============================================================================
@@ -137,9 +178,11 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [result, setResult] = useState<HandResult | null>(null);
   const [message, setMessage] = useState<string>('');
   const [actionLog, setActionLog] = useState<string[]>([]);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const controllerRef = useRef<GameController | null>(null);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
+  const autoDealTimerRef = useRef<number | null>(null);
 
   const heroIndex = 0; // Hero is always seat 0
 
@@ -149,14 +192,30 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setGameState(controllerRef.current.getState());
   }, [config]);
 
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoDealTimerRef.current) {
+        clearTimeout(autoDealTimerRef.current);
+      }
+    };
+  }, []);
+
   // Start a new hand
   const startNewHand = useCallback(async () => {
     if (!controllerRef.current) return;
+
+    // Clear any pending auto-deal timer
+    if (autoDealTimerRef.current) {
+      clearTimeout(autoDealTimerRef.current);
+      autoDealTimerRef.current = null;
+    }
 
     setPhase('playing');
     setResult(null);
     setMessage('');
     setActionLog([]);
+    setCountdown(null);
 
     // Set up hero decision callback
     controllerRef.current.setHeroDecisionCallback(async (state, playerIndex) => {
@@ -180,12 +239,41 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     try {
       const handResult = await controllerRef.current.playHand();
       setResult(handResult);
-      setPhase('complete');
       setGameState(controllerRef.current.getState());
       setMessage('');
 
       // Rotate dealer for next hand
       controllerRef.current.rotateDealer();
+
+      // Check if game can continue
+      if (!controllerRef.current.canContinue()) {
+        setPhase('game-over');
+        return;
+      }
+
+      // Set up auto-deal countdown
+      setPhase('complete');
+      setCountdown(3);
+
+      // Countdown timer
+      let remaining = 3;
+      const countdownInterval = setInterval(() => {
+        remaining -= 1;
+        if (remaining > 0) {
+          setCountdown(remaining);
+        } else {
+          clearInterval(countdownInterval);
+          setCountdown(null);
+        }
+      }, 1000);
+
+      // Auto-deal after delay
+      autoDealTimerRef.current = window.setTimeout(() => {
+        clearInterval(countdownInterval);
+        setCountdown(null);
+        startNewHand();
+      }, AUTO_DEAL_DELAY);
+
     } catch (error) {
       console.error('Error playing hand:', error);
       setPhase('idle');
@@ -203,6 +291,17 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     }
   }, []);
 
+  // Restart the entire game
+  const restartGame = useCallback(() => {
+    controllerRef.current = createGameController(config);
+    setGameState(controllerRef.current.getState());
+    setPhase('idle');
+    setResult(null);
+    setMessage('');
+    setActionLog([]);
+    setCountdown(null);
+  }, [config]);
+
   // Format action for display
   function formatAction(action: PlayerAction): string {
     switch (action.type) {
@@ -214,6 +313,42 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       case 'all-in': return 'goes ALL-IN';
       default: return action.type;
     }
+  }
+
+  // Render game over state
+  if (phase === 'game-over' && gameState) {
+    const winner = gameState.players.find(p => p.stack > 0);
+    const isHeroWinner = winner?.id === 'hero';
+
+    return (
+      <div style={styles.container}>
+        <div style={styles.header}>
+          <span style={styles.title}>Texas Hold'em</span>
+        </div>
+        <div style={styles.gameOverPanel}>
+          <div style={styles.gameOverTitle}>
+            {isHeroWinner ? 'You Win!' : 'Game Over'}
+          </div>
+          <div style={styles.gameOverInfo}>
+            {isHeroWinner
+              ? `Congratulations! You won with $${winner?.stack}`
+              : `${winner?.name} wins with $${winner?.stack}`}
+          </div>
+          <button
+            style={styles.restartButton}
+            onClick={restartGame}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.35)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
+            }}
+          >
+            Play Again
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Render idle state
@@ -296,6 +431,11 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
               </div>
             )}
           </div>
+          {countdown !== null && (
+            <div style={styles.countdown}>
+              Next hand in {countdown}...
+            </div>
+          )}
         </div>
       )}
 

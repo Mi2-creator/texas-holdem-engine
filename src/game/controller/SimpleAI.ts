@@ -54,32 +54,45 @@ export function makeAIDecision(
     return { type: 'fold' };
   }
 
-  // If can check, usually check
+  // If can check, usually check but sometimes bet
   if (validActions.canCheck) {
-    // Sometimes bet if aggressive
-    if (config.style === 'aggressive' && validActions.canBet && Math.random() < 0.3) {
-      return {
-        type: 'bet',
-        amount: Math.min(validActions.minBet * 2, validActions.maxBet),
-      };
+    if (validActions.canBet) {
+      // Bet frequency based on style
+      const betFrequency = config.style === 'aggressive' ? 0.35 :
+                           config.style === 'passive' ? 0.1 : 0.2;
+      if (Math.random() < betFrequency) {
+        const betSize = config.style === 'aggressive'
+          ? Math.min(Math.floor(state.pot * 0.75), validActions.maxBet)
+          : validActions.minBet;
+        return {
+          type: 'bet',
+          amount: Math.max(validActions.minBet, betSize),
+        };
+      }
     }
     return { type: 'check' };
   }
 
-  // Facing a bet - decide call/fold/raise
+  // Facing a bet - consider pot odds
   const callAmount = validActions.callAmount;
-  const callRatio = callAmount / player.stack;
+  const potAfterCall = state.pot + callAmount;
+  const potOdds = callAmount / potAfterCall; // Need to win this % to break even
+  const callRatio = callAmount / player.stack; // What % of stack to call
 
-  // Fold if call is too expensive
-  if (callRatio > config.foldThreshold) {
-    // But sometimes call anyway (pot odds simulation)
-    if (Math.random() < 0.2) {
+  // Fold if call is too expensive relative to both stack and pot odds
+  const shouldFold = callRatio > config.foldThreshold || potOdds > 0.5;
+
+  if (shouldFold) {
+    // Getting bad odds - usually fold, but sometimes call (represents hand strength)
+    const heroicCallChance = config.style === 'aggressive' ? 0.3 :
+                             config.style === 'passive' ? 0.1 : 0.2;
+    if (Math.random() < heroicCallChance) {
       return validActions.canCall ? { type: 'call' } : { type: 'all-in' };
     }
     return { type: 'fold' };
   }
 
-  // Consider raising
+  // Getting reasonable odds - consider raising
   if (validActions.canRaise && Math.random() < config.raiseFrequency) {
     const raiseAmount = calculateRaiseAmount(state, validActions, config);
     return { type: 'raise', amount: raiseAmount };
@@ -90,9 +103,13 @@ export function makeAIDecision(
     return { type: 'call' };
   }
 
-  // Can't call (not enough chips) - go all-in or fold
+  // Must go all-in to continue (call amount >= stack)
   if (player.stack > 0) {
-    return { type: 'all-in' };
+    // More likely to commit if pot odds are good
+    if (potOdds < 0.35 || Math.random() < 0.4) {
+      return { type: 'all-in' };
+    }
+    return { type: 'fold' };
   }
 
   return { type: 'fold' };
@@ -116,13 +133,13 @@ function calculateRaiseAmount(
     case 'aggressive':
       // Pot-sized or larger raise
       const potRaise = Math.min(state.pot + state.currentBet * 2, maxRaise);
-      return Math.max(minRaise, potRaise);
+      return Math.floor(Math.max(minRaise, potRaise));
 
     case 'neutral':
     default:
       // 2-3x current bet
       const midRaise = state.currentBet * 2.5;
-      return Math.min(Math.max(minRaise, midRaise), maxRaise);
+      return Math.floor(Math.min(Math.max(minRaise, midRaise), maxRaise));
   }
 }
 

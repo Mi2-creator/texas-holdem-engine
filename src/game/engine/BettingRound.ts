@@ -71,7 +71,8 @@ export function getValidActions(state: TableState): ValidActions {
 
   const callAmount = getCallAmount(state, state.activePlayerIndex);
   const canCheck = callAmount === 0;
-  const canCall = callAmount > 0 && callAmount < player.stack;
+  // Can call if there's something to call and we have chips (includes all-in calls)
+  const canCall = callAmount > 0 && player.stack > 0;
   const canFold = true;
 
   // Betting (when no one has bet yet)
@@ -80,10 +81,15 @@ export function getValidActions(state: TableState): ValidActions {
   const maxBet = canBet ? player.stack : 0;
 
   // Raising (when there's a bet to raise)
-  const canRaise = state.currentBet > 0 && player.stack > callAmount;
+  // Must have chips beyond the call amount to raise
+  const hasChipsToRaise = player.stack > callAmount;
   const minRaiseAmount = state.minRaise;
-  const minRaise = canRaise ? state.currentBet + minRaiseAmount : 0;
-  const maxRaise = canRaise ? player.stack + player.currentBet : 0;
+  const minRaiseTotal = state.currentBet + minRaiseAmount;
+  const maxRaiseTotal = player.stack + player.currentBet;
+  // Can only raise if we can afford at least the minimum raise
+  const canRaise = state.currentBet > 0 && hasChipsToRaise && maxRaiseTotal >= minRaiseTotal;
+  const minRaise = canRaise ? minRaiseTotal : 0;
+  const maxRaise = canRaise ? maxRaiseTotal : 0;
 
   return {
     canFold,
@@ -200,10 +206,13 @@ export function applyAction(
 
     case 'call': {
       const callAmount = getCallAmount(state, playerIndex);
+      const newStack = player.stack - callAmount;
       newState = updatePlayer(newState, playerIndex, {
-        stack: player.stack - callAmount,
+        stack: newStack,
         currentBet: player.currentBet + callAmount,
         totalBetThisHand: player.totalBetThisHand + callAmount,
+        // Mark as all-in if stack is depleted
+        status: newStack === 0 ? 'all-in' : player.status,
       });
       newState = addToPot(newState, callAmount);
       break;
@@ -211,10 +220,13 @@ export function applyAction(
 
     case 'bet': {
       const betAmount = action.amount!;
+      const newStack = player.stack - betAmount;
       newState = updatePlayer(newState, playerIndex, {
-        stack: player.stack - betAmount,
+        stack: newStack,
         currentBet: betAmount,
         totalBetThisHand: player.totalBetThisHand + betAmount,
+        // Mark as all-in if stack is depleted
+        status: newStack === 0 ? 'all-in' : player.status,
       });
       newState = addToPot(newState, betAmount);
       newState = {
@@ -230,11 +242,14 @@ export function applyAction(
       const raiseToAmount = action.amount!;
       const additionalAmount = raiseToAmount - player.currentBet;
       const raiseSize = raiseToAmount - state.currentBet;
+      const newStack = player.stack - additionalAmount;
 
       newState = updatePlayer(newState, playerIndex, {
-        stack: player.stack - additionalAmount,
+        stack: newStack,
         currentBet: raiseToAmount,
         totalBetThisHand: player.totalBetThisHand + additionalAmount,
+        // Mark as all-in if stack is depleted
+        status: newStack === 0 ? 'all-in' : player.status,
       });
       newState = addToPot(newState, additionalAmount);
       newState = {
