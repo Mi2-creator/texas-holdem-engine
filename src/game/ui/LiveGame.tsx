@@ -43,7 +43,7 @@ interface LiveGameProps {
   readonly config?: Partial<GameConfig>;
 }
 
-type GamePhase = 'idle' | 'playing' | 'waiting-for-action' | 'complete' | 'game-over';
+type GamePhase = 'welcome' | 'ready' | 'playing' | 'waiting-for-action' | 'complete' | 'game-over';
 
 const AUTO_DEAL_DELAY = 3000; // 3 seconds before auto-dealing next hand
 
@@ -177,6 +177,186 @@ const styles = {
     transition: 'all 0.15s ease',
     border: '1px solid rgba(234, 179, 8, 0.3)',
   },
+
+  // Welcome Screen
+  welcomeOverlay: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '80vh',
+    textAlign: 'center' as const,
+  },
+
+  welcomeCard: {
+    padding: '48px 64px',
+    borderRadius: '20px',
+    backgroundColor: 'rgba(15, 15, 20, 0.95)',
+    border: '1px solid rgba(75, 85, 99, 0.3)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+  },
+
+  welcomeTitle: {
+    fontSize: '32px',
+    fontWeight: 700,
+    color: '#fff',
+    marginBottom: '8px',
+    letterSpacing: '1px',
+  },
+
+  welcomeSubtitle: {
+    fontSize: '14px',
+    color: 'rgba(156, 163, 175, 0.8)',
+    marginBottom: '32px',
+  },
+
+  welcomeSettings: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '32px',
+    marginBottom: '32px',
+    padding: '16px 24px',
+    borderRadius: '12px',
+    backgroundColor: 'rgba(30, 30, 40, 0.6)',
+  },
+
+  welcomeStat: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '4px',
+  },
+
+  welcomeStatLabel: {
+    fontSize: '11px',
+    color: 'rgba(156, 163, 175, 0.6)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+
+  welcomeStatValue: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: '#fff',
+  },
+
+  startButton: {
+    padding: '14px 48px',
+    borderRadius: '10px',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    color: '#22c55e',
+    fontSize: '16px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    border: '2px solid rgba(34, 197, 94, 0.4)',
+  },
+
+  // Session Controls
+  sessionControls: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'center',
+  },
+
+  secondaryButton: {
+    padding: '8px 16px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(75, 85, 99, 0.2)',
+    color: '#9ca3af',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    border: '1px solid rgba(75, 85, 99, 0.3)',
+  },
+
+  // Enhanced Result Panel
+  resultPanelEnhanced: {
+    padding: '28px 40px',
+    borderRadius: '16px',
+    backgroundColor: 'rgba(20, 20, 28, 0.98)',
+    border: '1px solid rgba(168, 85, 247, 0.3)',
+    textAlign: 'center' as const,
+    minWidth: '340px',
+  },
+
+  resultHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '16px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid rgba(75, 85, 99, 0.3)',
+  },
+
+  resultHandNumber: {
+    fontSize: '11px',
+    color: 'rgba(156, 163, 175, 0.6)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+
+  resultOutcome: {
+    fontSize: '12px',
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: '12px',
+  },
+
+  resultWinner: {
+    fontSize: '20px',
+    fontWeight: 700,
+    color: '#fff',
+    marginBottom: '8px',
+  },
+
+  resultPot: {
+    fontSize: '24px',
+    fontWeight: 700,
+    color: '#22c55e',
+    marginBottom: '12px',
+  },
+
+  resultHand: {
+    fontSize: '14px',
+    color: '#a855f7',
+    marginBottom: '16px',
+  },
+
+  resultStacks: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '24px',
+    padding: '12px 16px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(30, 30, 40, 0.6)',
+    marginBottom: '16px',
+  },
+
+  resultStackItem: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '2px',
+  },
+
+  resultStackLabel: {
+    fontSize: '10px',
+    color: 'rgba(156, 163, 175, 0.6)',
+  },
+
+  resultStackValue: {
+    fontSize: '14px',
+    fontWeight: 600,
+  },
+
+  resultActions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'center',
+    marginTop: '8px',
+  },
 };
 
 // ============================================================================
@@ -185,7 +365,8 @@ const styles = {
 
 export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [gameState, setGameState] = useState<TableState | null>(null);
-  const [phase, setPhase] = useState<GamePhase>('idle');
+  const [phase, setPhase] = useState<GamePhase>('welcome');
+  const [handCount, setHandCount] = useState<number>(0);
   const [result, setResult] = useState<HandResult | null>(null);
   const [message, setMessage] = useState<string>('');
   const [actionLog, setActionLog] = useState<string[]>([]);
@@ -225,17 +406,24 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
 
     setPhase('playing');
     setResult(null);
-    setMessage('');
+    setMessage('Dealing cards...');
     setActionLog([]);
     setCountdown(null);
     setLastActions({});
+    setHandCount(prev => prev + 1);
 
     // Set up hero decision callback
     controllerRef.current.setHeroDecisionCallback(async (state, playerIndex) => {
       return new Promise<PlayerAction>((resolve) => {
         setGameState(state);
         setPhase('waiting-for-action');
-        setMessage('Your turn - choose an action');
+        // Contextual message based on situation
+        const callAmount = state.currentBet - state.players[playerIndex].currentBet;
+        if (callAmount > 0) {
+          setMessage(`Your turn · $${formatChips(callAmount)} to call`);
+        } else {
+          setMessage('Your turn · Check or bet');
+        }
         actionResolverRef.current = resolve;
       });
     });
@@ -308,13 +496,20 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
 
   // Restart the entire game
   const restartGame = useCallback(() => {
+    // Clear any pending timers
+    if (autoDealTimerRef.current) {
+      clearTimeout(autoDealTimerRef.current);
+      autoDealTimerRef.current = null;
+    }
     controllerRef.current = createGameController(config);
     setGameState(controllerRef.current.getState());
-    setPhase('idle');
+    setPhase('welcome');
     setResult(null);
     setMessage('');
     setActionLog([]);
     setCountdown(null);
+    setLastActions({});
+    setHandCount(0);
   }, [config]);
 
   // Format action for display
@@ -337,77 +532,153 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
 
     return (
       <div style={styles.container}>
-        <div style={styles.header}>
-          <span style={styles.title}>Texas Hold'em</span>
-        </div>
-        <div style={styles.gameOverPanel}>
-          <div style={styles.gameOverTitle}>
-            {isHeroWinner ? 'You Win!' : 'Game Over'}
+        <div style={styles.welcomeOverlay}>
+          <div style={{
+            ...styles.gameOverPanel,
+            border: isHeroWinner ? '2px solid rgba(34, 197, 94, 0.4)' : '2px solid rgba(239, 68, 68, 0.4)',
+          }}>
+            <div style={{
+              ...styles.gameOverTitle,
+              color: isHeroWinner ? '#22c55e' : '#ef4444',
+            }}>
+              {isHeroWinner ? '🎉 Victory!' : 'Game Over'}
+            </div>
+            <div style={styles.gameOverInfo}>
+              {isHeroWinner
+                ? `You've won the match!`
+                : `${winner?.name} wins the match`}
+            </div>
+
+            {/* Final Stats */}
+            <div style={{
+              ...styles.welcomeSettings,
+              marginBottom: '24px',
+            }}>
+              <div style={styles.welcomeStat}>
+                <span style={styles.welcomeStatLabel}>Hands Played</span>
+                <span style={styles.welcomeStatValue}>{handCount}</span>
+              </div>
+              <div style={styles.welcomeStat}>
+                <span style={styles.welcomeStatLabel}>Final Stack</span>
+                <span style={{
+                  ...styles.welcomeStatValue,
+                  color: isHeroWinner ? '#22c55e' : '#ef4444',
+                }}>
+                  ${formatChips(winner?.stack ?? 0)}
+                </span>
+              </div>
+            </div>
+
+            <button
+              className="animate-button-press"
+              style={{
+                ...styles.restartButton,
+                backgroundColor: isHeroWinner ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                color: isHeroWinner ? '#22c55e' : '#eab308',
+                borderColor: isHeroWinner ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)',
+              }}
+              onClick={restartGame}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = isHeroWinner
+                  ? 'rgba(34, 197, 94, 0.35)'
+                  : 'rgba(234, 179, 8, 0.35)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = isHeroWinner
+                  ? 'rgba(34, 197, 94, 0.2)'
+                  : 'rgba(234, 179, 8, 0.2)';
+              }}
+            >
+              Play Again
+            </button>
           </div>
-          <div style={styles.gameOverInfo}>
-            {isHeroWinner
-              ? `Congratulations! You won with $${formatChips(winner?.stack ?? 0)}`
-              : `${winner?.name} wins with $${formatChips(winner?.stack ?? 0)}`}
-          </div>
-          <button
-            style={styles.restartButton}
-            onClick={restartGame}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.35)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
-            }}
-          >
-            Play Again
-          </button>
         </div>
       </div>
     );
   }
 
-  // Render idle state
-  if (phase === 'idle' || !gameState) {
+  // Get effective config values
+  const effectiveConfig = {
+    smallBlind: config?.smallBlind ?? 5,
+    bigBlind: config?.bigBlind ?? 10,
+    startingStack: config?.startingStack ?? 1000,
+  };
+
+  // Render welcome screen
+  if (phase === 'welcome' || !gameState) {
     return (
       <div style={styles.container}>
-        <div style={styles.header}>
-          <span style={styles.title}>Texas Hold'em</span>
+        <div style={styles.welcomeOverlay}>
+          <div style={styles.welcomeCard}>
+            <div style={styles.welcomeTitle}>Texas Hold'em</div>
+            <div style={styles.welcomeSubtitle}>Heads-Up No-Limit</div>
+
+            <div style={styles.welcomeSettings}>
+              <div style={styles.welcomeStat}>
+                <span style={styles.welcomeStatLabel}>Blinds</span>
+                <span style={styles.welcomeStatValue}>
+                  ${formatChips(effectiveConfig.smallBlind)} / ${formatChips(effectiveConfig.bigBlind)}
+                </span>
+              </div>
+              <div style={styles.welcomeStat}>
+                <span style={styles.welcomeStatLabel}>Starting Stack</span>
+                <span style={styles.welcomeStatValue}>${formatChips(effectiveConfig.startingStack)}</span>
+              </div>
+              <div style={styles.welcomeStat}>
+                <span style={styles.welcomeStatLabel}>Players</span>
+                <span style={styles.welcomeStatValue}>2</span>
+              </div>
+            </div>
+
+            <button
+              className="animate-button-press"
+              style={styles.startButton}
+              onClick={startNewHand}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.35)';
+                e.currentTarget.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              Start Game
+            </button>
+          </div>
         </div>
-        <button
-          style={styles.newHandButton}
-          onClick={startNewHand}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.35)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
-          }}
-        >
-          Start New Hand
-        </button>
       </div>
     );
   }
 
   return (
     <div style={styles.container}>
-      {/* Header */}
+      {/* Header with Session Controls */}
       <div style={styles.header}>
         <span style={styles.title}>Texas Hold'em</span>
-        {phase === 'complete' && (
+
+        <div style={styles.sessionControls}>
+          {/* Hand Counter */}
+          {handCount > 0 && (
+            <span style={{ fontSize: '12px', color: 'rgba(156, 163, 175, 0.6)' }}>
+              Hand #{handCount}
+            </span>
+          )}
+
+          {/* Restart Game Button - always available during play */}
           <button
-            style={styles.newHandButton}
-            onClick={startNewHand}
+            style={styles.secondaryButton}
+            onClick={restartGame}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.35)';
+              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
             }}
           >
-            Deal Next Hand
+            New Game
           </button>
-        )}
+        </div>
       </div>
 
       {/* Game Status */}
@@ -433,25 +704,68 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         disabled={phase !== 'waiting-for-action'}
       />
 
-      {/* Result Panel */}
+      {/* Result Panel - Enhanced Round Summary */}
       {phase === 'complete' && result && (
-        <div className="animate-win-glow" style={styles.resultPanel}>
-          <div style={styles.resultTitle}>
-            {result.endedByFold ? 'Win by Fold' : 'Showdown'}
+        <div className="animate-win-glow" style={styles.resultPanelEnhanced}>
+          {/* Header */}
+          <div style={styles.resultHeader}>
+            <span style={styles.resultHandNumber}>Hand #{handCount}</span>
+            <span style={{
+              ...styles.resultOutcome,
+              backgroundColor: result.endedByFold ? 'rgba(239, 68, 68, 0.2)' : 'rgba(168, 85, 247, 0.2)',
+              color: result.endedByFold ? '#ef4444' : '#a855f7',
+            }}>
+              {result.endedByFold ? 'Fold' : 'Showdown'}
+            </span>
           </div>
-          <div style={styles.resultInfo}>
-            <div><strong>{result.winnerNames.join(', ')}</strong> wins ${formatChips(result.potSize)}</div>
-            {!result.endedByFold && (
-              <div style={{ marginTop: '8px', color: '#a855f7' }}>
-                {result.winningHandDescription}
-              </div>
-            )}
+
+          {/* Winner */}
+          <div style={styles.resultWinner}>
+            {result.winnerNames[0] === 'You' ? '🎉 You Win!' : `${result.winnerNames[0]} Wins`}
           </div>
-          {countdown !== null && (
-            <div style={styles.countdown}>
-              Next hand in {countdown}...
-            </div>
+
+          {/* Pot Won */}
+          <div style={styles.resultPot}>+${formatChips(result.potSize)}</div>
+
+          {/* Winning Hand */}
+          {!result.endedByFold && (
+            <div style={styles.resultHand}>{result.winningHandDescription}</div>
           )}
+
+          {/* Current Stacks */}
+          <div style={styles.resultStacks}>
+            {gameState.players.map((player, idx) => (
+              <div key={player.id} style={styles.resultStackItem}>
+                <span style={styles.resultStackLabel}>
+                  {idx === heroIndex ? 'You' : player.name}
+                </span>
+                <span style={{
+                  ...styles.resultStackValue,
+                  color: player.stack > effectiveConfig.startingStack ? '#22c55e' :
+                         player.stack < effectiveConfig.startingStack ? '#ef4444' : '#fff',
+                }}>
+                  ${formatChips(player.stack)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions */}
+          <div style={styles.resultActions}>
+            <button
+              className="animate-button-press"
+              style={styles.newHandButton}
+              onClick={startNewHand}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.35)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+              }}
+            >
+              {countdown !== null ? `Next Hand (${countdown})` : 'Deal Next Hand'}
+            </button>
+          </div>
         </div>
       )}
 

@@ -143,6 +143,26 @@ const styles = {
     fontSize: '14px',
     fontStyle: 'italic' as const,
   },
+
+  statusIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 24px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(30, 30, 40, 0.6)',
+  },
+
+  statusDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+  },
+
+  statusText: {
+    fontSize: '14px',
+    fontWeight: 500,
+  },
 };
 
 // ============================================================================
@@ -213,13 +233,28 @@ export function LiveActionPanel({
     setBetAmount(Math.min(Math.max(newAmount, min), max));
   }, [validActions, state]);
 
-  // Not hero's turn - show waiting message
+  // Not hero's turn - show status indicator
   if (!isHeroTurn || disabled) {
+    const isComplete = disabled;
+    const isWaiting = !disabled && !isHeroTurn;
+
     return (
       <div style={styles.container}>
-        <span style={styles.waitingMessage}>
-          {disabled ? 'Hand complete' : 'Waiting for opponent...'}
-        </span>
+        <div style={styles.statusIndicator}>
+          <div
+            style={{
+              ...styles.statusDot,
+              backgroundColor: isComplete ? '#a855f7' : '#fbbf24',
+              animation: isWaiting ? 'pulse 1.5s ease-in-out infinite' : undefined,
+            }}
+          />
+          <span style={{
+            ...styles.statusText,
+            color: isComplete ? '#a855f7' : '#fbbf24',
+          }}>
+            {isComplete ? 'Hand Complete' : 'Opponent is thinking...'}
+          </span>
+        </div>
       </div>
     );
   }
