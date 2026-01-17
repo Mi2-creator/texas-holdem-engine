@@ -16,6 +16,22 @@ import {
   dryRunExecutor,
 } from './commands/CommandExecutor';
 
+// ============================================================================
+// 【Phase 5】Table-First Experience Imports
+// ============================================================================
+import { TableExperienceLayout } from './components/TableExperienceLayout';
+import { HeroPokerTable } from './components/HeroPokerTable';
+import {
+  determineActiveView,
+  type ViewModeResult,
+} from './controllers/ViewModeController';
+import { buildDecisionTimeline, type PlayerInfo } from './models/DecisionTimelineModel';
+
+// ============================================================================
+// 【Phase 8】Learning Layer Imports
+// ============================================================================
+import { useSessionAccumulator } from './hooks/useSessionAccumulator';
+
 // 数据源配置（UI 层定义，不依赖 replay 类型）
 const DATA_SOURCES = {
   'demo-fold': { name: 'Demo (Fold Ending)', events: demoEvents },
@@ -30,6 +46,12 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('debug');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
   const [executorMode, setExecutorMode] = useState<ExecutorMode>('dry');
+
+  // ============================================================================
+  // 【Phase 8】Session Accumulator for Learning
+  // ============================================================================
+  const session = useSessionAccumulator();
+  const [enableLearning, setEnableLearning] = useState<boolean>(false);
 
   // ============================================================================
   // 【H-1 语义封板】LIVE 模式事件追踪
@@ -142,6 +164,43 @@ function App() {
     return previousSnapshotRef.current;
   }, [viewModel.index, viewModel.snapshot]);
 
+  // ============================================================================
+  // 【Phase 5】View Mode Calculation for Table-First Experience
+  // ============================================================================
+  const heroSeat = 0; // Default hero seat
+
+  // 【Phase 5.3】当前事件信息（用于 Action Emotion Layer）
+  const currentEvent = currentEvents[viewModel.index];
+  const previousPotTotal = previousSnapshot?.potTotal ?? 0;
+
+  const viewModeResult: ViewModeResult = useMemo(() => {
+    const safeEvents = currentEvents ?? [];
+    const safePlayers = viewModel.snapshot.players ?? [];
+
+    // Build player info for timeline
+    const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+      id: p?.id ?? '',
+      name: p?.name ?? 'Unknown',
+      seat: p?.seat,
+    }));
+
+    // Build decision timeline
+    const timeline = buildDecisionTimeline(safeEvents, playerInfos, heroSeat);
+
+    // Get current event
+    const currentEventForView = safeEvents[viewModel.index] ?? null;
+
+    // Determine active view mode
+    return determineActiveView(
+      currentEventForView,
+      safeEvents,
+      timeline,
+      viewModel.index,
+      heroSeat,
+      playerInfos
+    );
+  }, [currentEvents, viewModel.snapshot.players, viewModel.index, heroSeat]);
+
   return (
     <div style={{ padding: 20 }}>
       {/* 视图模式切换 */}
@@ -189,44 +248,117 @@ function App() {
             )}
           </div>
         )}
+
+        {/* 【Phase 8】Learning Mode Toggle */}
+        {viewMode === 'debug' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, color: '#888', textTransform: 'uppercase' }}>
+              Learning:
+            </span>
+            <button
+              onClick={() => setEnableLearning(prev => !prev)}
+              style={{
+                padding: '6px 14px',
+                border: enableLearning ? '2px solid #a855f7' : '2px solid #555',
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: enableLearning
+                  ? 'linear-gradient(135deg, #581c87 0%, #4c1d95 100%)'
+                  : 'linear-gradient(135deg, #374151 0%, #1f2937 100%)',
+                color: enableLearning ? '#c084fc' : '#9ca3af',
+                boxShadow: enableLearning
+                  ? '0 0 12px rgba(168, 85, 247, 0.4)'
+                  : 'none',
+                transition: 'all 0.2s ease',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+              }}
+            >
+              {enableLearning ? '● ON' : '○ OFF'}
+            </button>
+            {enableLearning && session.handCount > 0 && (
+              <span style={{
+                fontSize: 9,
+                color: '#a855f7',
+                fontWeight: 600,
+              }}>
+                {session.handCount} hand{session.handCount > 1 ? 's' : ''} tracked
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* PokerTable 在两种模式下均显示 */}
-      <PokerTable viewModel={viewModel} />
-
-      {/* 根据模式切换底部面板 */}
+      {/* ================================================================ */}
+      {/* 【Phase 5】Table-First Experience Layout */}
+      {/* ================================================================ */}
       {viewMode === 'debug' ? (
-        <ReplayDebugPanel
-          viewModel={viewModel}
-          actions={actions}
-          dataSourceOptions={Object.entries(DATA_SOURCES).map(([key, val]) => ({
-            key,
-            name: val.name,
-          }))}
-          currentDataSource={currentSource}
-          onDataSourceChange={handleDataSourceChange}
-          currentEventDescription={currentEventDescription}
-          currentEvent={currentEvents[viewModel.index]}
-          executorMode={executorMode} // 【H-2】传递执行模式，控制 Timeline 行为
-          events={currentEvents} // 【A 路线扩展】传递完整事件序列
-          previousSnapshot={previousSnapshot} // 【A 路线扩展】传递前一帧快照
+        <TableExperienceLayout
+          viewModeResult={viewModeResult}
+          heroSeat={heroSeat}
+          compact={true}
+          tableContent={
+            <HeroPokerTable
+              viewModel={viewModel}
+              viewModeResult={viewModeResult}
+              heroSeat={heroSeat}
+              enableHeroEnhancements={true}
+              currentEventType={currentEvent?.type}
+              currentEventAmount={currentEvent?.amount}
+              previousPotTotal={previousPotTotal}
+            />
+          }
+          analysisContent={
+            <ReplayDebugPanel
+              viewModel={viewModel}
+              actions={actions}
+              dataSourceOptions={Object.entries(DATA_SOURCES).map(([key, val]) => ({
+                key,
+                name: val.name,
+              }))}
+              currentDataSource={currentSource}
+              onDataSourceChange={handleDataSourceChange}
+              currentEventDescription={currentEventDescription}
+              currentEvent={currentEvents[viewModel.index]}
+              executorMode={executorMode}
+              events={currentEvents}
+              previousSnapshot={previousSnapshot}
+              handHistories={session.handHistories}
+              onHandComplete={session.addHand}
+              enableLearning={enableLearning}
+            />
+          }
         />
       ) : (
-        <div style={{ marginTop: 20 }}>
-          {/* 【H-5】PlayerHUD 仅透传 snapshot，不传递 executorMode */}
-          {/* 【A 路线】透传 events 给 ActionTimelinePanel */}
-          <PlayerHUD
-            viewModel={viewModel}
-            actions={actions}
-            currentEventDescription={currentEventDescription}
-            selectedPlayerId={selectedPlayerId}
-            playerOptions={playerOptions}
-            onPlayerSelect={setSelectedPlayerId}
-            executor={executor}
-            events={currentEvents}
-            previousSnapshot={previousSnapshot} // 【A 路线扩展】传递前一帧快照
-          />
-        </div>
+        <>
+          {/* Player View - 简化版，仍使用 Hero 增强桌面 */}
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <HeroPokerTable
+              viewModel={viewModel}
+              viewModeResult={viewModeResult}
+              heroSeat={heroSeat}
+              enableHeroEnhancements={true}
+              currentEventType={currentEvent?.type}
+              currentEventAmount={currentEvent?.amount}
+              previousPotTotal={previousPotTotal}
+            />
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <PlayerHUD
+              viewModel={viewModel}
+              actions={actions}
+              currentEventDescription={currentEventDescription}
+              selectedPlayerId={selectedPlayerId}
+              playerOptions={playerOptions}
+              onPlayerSelect={setSelectedPlayerId}
+              executor={executor}
+              events={currentEvents}
+              previousSnapshot={previousSnapshot}
+            />
+          </div>
+        </>
       )}
     </div>
   );

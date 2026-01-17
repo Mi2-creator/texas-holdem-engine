@@ -22,7 +22,7 @@
 // 该分层确保 LIVE 语义不被 UI 操作污染。
 // ============================================================================
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ReplayViewModel, PlayerActions } from '../types/replay';
 import type { ReplayEvent } from '../replay/events';
 import type { ExecutorMode } from '../commands/CommandExecutor';
@@ -66,7 +66,9 @@ import {
   type RecentAction,
 } from '../controllers/CoachHintEngine';
 import { ReviewPanel } from './ReviewPanel';
-import { generateReviewInsight } from '../controllers/ReviewInsightEngine';
+import { generateReviewInsight, type ReviewInsight } from '../controllers/ReviewInsightEngine';
+import { LearningPanel } from './LearningPanel';
+import type { HandHistory } from '../controllers/LearningProfileEngine';
 
 /**
  * 数据源选项
@@ -95,6 +97,12 @@ interface ReplayDebugPanelProps {
   events?: readonly ReplayEvent[];
   /** 【A 路线扩展】前一帧快照（用于 Diff Panel） */
   previousSnapshot?: ReplayViewModel['snapshot'];
+  /** 【Phase 8】手牌历史（用于学习分析） */
+  handHistories?: readonly HandHistory[];
+  /** 【Phase 8】手牌完成回调（用于累积学习数据） */
+  onHandComplete?: (reviewInsight: ReviewInsight) => void;
+  /** 【Phase 8】是否启用学习面板（默认 false） */
+  enableLearning?: boolean;
 }
 
 /**
@@ -126,6 +134,9 @@ export function ReplayDebugPanel({
   executorMode = 'dry',
   events,
   previousSnapshot,
+  handHistories,
+  onHandComplete,
+  enableLearning = false,
 }: ReplayDebugPanelProps) {
   // 【H-2 语义】：LIVE 模式禁用 UI seek，只能通过 handlePushEvents 改变 index
   const isLiveMode = executorMode === 'live';
@@ -219,6 +230,29 @@ export function ReplayDebugPanel({
     timeline,
     handEndReason: viewModel.snapshot.handEndReason,
   });
+
+  // ========================================
+  // 【Phase 8】Hand Complete Callback
+  // ========================================
+  const hasCalledOnHandComplete = useRef(false);
+  const currentHandId = viewModel.snapshot.handId;
+
+  useEffect(() => {
+    // Reset flag when hand changes
+    hasCalledOnHandComplete.current = false;
+  }, [currentHandId]);
+
+  useEffect(() => {
+    // Call onHandComplete when review becomes available (hand ended)
+    if (
+      onHandComplete &&
+      reviewInsight.isAvailable &&
+      !hasCalledOnHandComplete.current
+    ) {
+      hasCalledOnHandComplete.current = true;
+      onHandComplete(reviewInsight);
+    }
+  }, [onHandComplete, reviewInsight]);
 
   // Panel theme colors
   const panelColors = {
@@ -631,6 +665,18 @@ export function ReplayDebugPanel({
           {/* ================================================================ */}
           {reviewInsight.isAvailable && (
             <ReviewPanel insight={reviewInsight} compact={true} />
+          )}
+
+          {/* ================================================================ */}
+          {/* 【Phase 8】Learning Panel - 跨手牌学习面板 */}
+          {/* 仅在 enableLearning=true 且 handHistories >= 2 时可见 */}
+          {/* ================================================================ */}
+          {enableLearning && handHistories && handHistories.length >= 2 && (
+            <LearningPanel
+              handHistories={handHistories}
+              heroSeat={0}
+              compact={true}
+            />
           )}
         </div>
       )}
