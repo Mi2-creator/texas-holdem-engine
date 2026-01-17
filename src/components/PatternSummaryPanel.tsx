@@ -1,6 +1,7 @@
 /**
  * PatternSummaryPanel.tsx
  * Phase 7.3 - Pattern summary for entire hand review
+ * Phase 9.3 - Added player language support
  *
  * Summarizes structural patterns observed in the hand.
  * No judgments - only describes what happened structurally.
@@ -8,6 +9,10 @@
 
 import React from 'react';
 import type { PatternSummary } from '../controllers/ReviewInsightEngine';
+import {
+  mapPatternToPlayerText,
+  mapPatternObservationsToPlayerText,
+} from '../adapters/playerLanguage';
 
 // ============================================================================
 // Types
@@ -16,6 +21,8 @@ import type { PatternSummary } from '../controllers/ReviewInsightEngine';
 interface PatternSummaryPanelProps {
   readonly patterns: PatternSummary;
   readonly compact?: boolean;
+  /** Phase 9.3: Use player-friendly language instead of structural data */
+  readonly usePlayerLanguage?: boolean;
 }
 
 // ============================================================================
@@ -112,6 +119,53 @@ const styles = {
     backgroundColor: 'rgba(75, 85, 99, 0.2)',
     margin: '8px 0',
   } as const,
+
+  // Phase 9.3: Player language styles
+  playerContainer: {
+    padding: '12px 14px',
+    backgroundColor: 'rgba(30, 30, 30, 0.3)',
+    borderRadius: '8px',
+    border: '1px solid rgba(75, 85, 99, 0.2)',
+  } as const,
+
+  playerPrimary: {
+    fontSize: '12px',
+    color: 'rgba(209, 213, 219, 0.95)',
+    lineHeight: '18px',
+    marginBottom: '6px',
+  } as const,
+
+  playerSecondary: {
+    fontSize: '11px',
+    color: 'rgba(156, 163, 175, 0.7)',
+    lineHeight: '16px',
+  } as const,
+
+  playerObservations: {
+    marginTop: '10px',
+    paddingTop: '8px',
+    borderTop: '1px solid rgba(75, 85, 99, 0.15)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+  } as const,
+
+  playerObservationItem: {
+    fontSize: '10px',
+    color: 'rgba(156, 163, 175, 0.7)',
+    paddingLeft: '10px',
+    position: 'relative' as const,
+  } as const,
+
+  playerObservationBullet: {
+    position: 'absolute' as const,
+    left: '0',
+    top: '5px',
+    width: '4px',
+    height: '4px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(107, 114, 128, 0.4)',
+  } as const,
 } as const;
 
 // ============================================================================
@@ -153,12 +207,41 @@ function getPatternIcon(pattern: string): string {
 export function PatternSummaryPanel({
   patterns,
   compact = false,
+  usePlayerLanguage = false,
 }: PatternSummaryPanelProps): React.ReactElement | null {
   // Don't render if no patterns
   if (!patterns || patterns.patterns.length === 0) {
     return null;
   }
 
+  // Phase 9.3: Player language mode - simplified view
+  if (usePlayerLanguage) {
+    const playerText = mapPatternToPlayerText(patterns);
+    if (!playerText) return null;
+
+    const filteredObservations = mapPatternObservationsToPlayerText(patterns.patterns);
+
+    return (
+      <div style={styles.playerContainer}>
+        <div style={styles.playerPrimary}>{playerText.primary}</div>
+        {playerText.secondary && (
+          <div style={styles.playerSecondary}>{playerText.secondary}</div>
+        )}
+        {!compact && filteredObservations.length > 0 && (
+          <div style={styles.playerObservations}>
+            {filteredObservations.map((obs, i) => (
+              <div key={i} style={styles.playerObservationItem}>
+                <span style={styles.playerObservationBullet} />
+                {obs}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Debug mode: full structural view
   const tensionStyle = getTensionBadgeStyle(patterns.overallTension);
 
   return (

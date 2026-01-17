@@ -1,6 +1,7 @@
 /**
  * ReviewPanel.tsx
  * Phase 7 - Complete review panel with entry point and content
+ * Phase 9.3 - Added player language support
  *
  * Provides post-hand review functionality:
  * - Review Bar (entry point, collapsed by default)
@@ -26,6 +27,8 @@ interface ReviewPanelProps {
   readonly collapsed?: boolean;
   readonly onToggle?: () => void;
   readonly compact?: boolean;
+  /** Phase 9.3: Use player-friendly language instead of structural data */
+  readonly usePlayerLanguage?: boolean;
 }
 
 // ============================================================================
@@ -183,6 +186,7 @@ export function ReviewPanel({
   collapsed: controlledCollapsed,
   onToggle,
   compact = false,
+  usePlayerLanguage = false,
 }: ReviewPanelProps): React.ReactElement | null {
   // Internal collapse state (used when not controlled)
   const [internalCollapsed, setInternalCollapsed] = useState(true);
@@ -285,6 +289,7 @@ export function ReviewPanel({
                     decision={decision}
                     index={index + 1}
                     compact={compact}
+                    usePlayerLanguage={usePlayerLanguage}
                   />
                 ))}
               </div>
@@ -299,6 +304,7 @@ export function ReviewPanel({
           <PatternSummaryPanel
             patterns={insight.patterns}
             compact={compact}
+            usePlayerLanguage={usePlayerLanguage}
           />
 
           {/* Close Button */}

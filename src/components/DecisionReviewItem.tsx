@@ -1,6 +1,7 @@
 /**
  * DecisionReviewItem.tsx
  * Phase 7.2 - Individual decision point display for review
+ * Phase 9.3 - Added player language support
  *
  * Displays a single key decision with structural context.
  * No judgments, no scores - only explains WHY this was a key decision.
@@ -13,6 +14,7 @@ import {
   getDecisionTypeColor,
   getTensionLabel,
 } from '../controllers/ReviewInsightEngine';
+import { mapDecisionToPlayerText } from '../adapters/playerLanguage';
 
 // ============================================================================
 // Types
@@ -22,6 +24,8 @@ interface DecisionReviewItemProps {
   readonly decision: ReviewDecision;
   readonly index: number; // Display index (1, 2, 3...)
   readonly compact?: boolean;
+  /** Phase 9.3: Use player-friendly language instead of structural data */
+  readonly usePlayerLanguage?: boolean;
 }
 
 // ============================================================================
@@ -157,6 +161,48 @@ const styles = {
     backgroundColor: 'rgba(107, 114, 128, 0.5)',
   } as const,
 
+  // Phase 9.3: Player language styles
+  playerContainer: {
+    padding: '12px 14px',
+    backgroundColor: 'rgba(30, 30, 30, 0.4)',
+    borderRadius: '8px',
+    border: '1px solid rgba(75, 85, 99, 0.2)',
+    marginBottom: '10px',
+  } as const,
+
+  playerHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '6px',
+  } as const,
+
+  playerIndex: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: 'rgba(129, 140, 248, 0.9)',
+  } as const,
+
+  playerPrimary: {
+    fontSize: '12px',
+    color: 'rgba(209, 213, 219, 0.95)',
+    lineHeight: '18px',
+  } as const,
+
+  playerSecondary: {
+    fontSize: '11px',
+    color: 'rgba(156, 163, 175, 0.7)',
+    marginTop: '4px',
+    paddingLeft: '30px',
+  } as const,
+
   actionTaken: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -207,7 +253,27 @@ export function DecisionReviewItem({
   decision,
   index,
   compact = false,
+  usePlayerLanguage = false,
 }: DecisionReviewItemProps): React.ReactElement {
+  // Phase 9.3: Player language mode - simplified view
+  if (usePlayerLanguage) {
+    const playerText = mapDecisionToPlayerText(decision);
+    if (!playerText) return <></>;
+
+    return (
+      <div style={styles.playerContainer}>
+        <div style={styles.playerHeader}>
+          <span style={styles.playerIndex}>{index}</span>
+          <span style={styles.playerPrimary}>{playerText.primary}</span>
+        </div>
+        {playerText.secondary && (
+          <div style={styles.playerSecondary}>{playerText.secondary}</div>
+        )}
+      </div>
+    );
+  }
+
+  // Debug mode: full structural view
   const typeColor = getDecisionTypeColor(decision.decisionType);
   const tensionColor = getTensionColor(decision.tension);
   const tensionLabel = getTensionLabel(decision.tension);

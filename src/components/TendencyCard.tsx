@@ -1,6 +1,7 @@
 /**
  * TendencyCard.tsx
  * Phase 8.2 - Single tendency observation display
+ * Phase 9.3 - Added player language support
  *
  * Displays one observed decision-making tendency.
  * All content is observational, not judgmental.
@@ -13,6 +14,10 @@ import {
   getTendencyCategoryIcon,
   getConfidenceLabel,
 } from '../controllers/LearningProfileEngine';
+import {
+  mapTendencyToPlayerText,
+  mapTendencyObservationsToPlayerText,
+} from '../adapters/playerLanguage';
 
 // ============================================================================
 // Types
@@ -21,6 +26,8 @@ import {
 interface TendencyCardProps {
   readonly tendency: TendencyObservation;
   readonly compact?: boolean;
+  /** Phase 9.3: Use player-friendly language instead of structural data */
+  readonly usePlayerLanguage?: boolean;
 }
 
 // ============================================================================
@@ -118,6 +125,55 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
   } as const,
+
+  // Phase 9.3: Player language styles
+  playerContainer: {
+    padding: '12px 14px',
+    backgroundColor: 'rgba(30, 30, 30, 0.4)',
+    borderRadius: '8px',
+    border: '1px solid rgba(168, 85, 247, 0.15)',
+    borderLeft: '3px solid rgba(168, 85, 247, 0.5)',
+    marginBottom: '10px',
+  } as const,
+
+  playerTitle: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: 'rgba(209, 213, 219, 0.95)',
+    marginBottom: '6px',
+  } as const,
+
+  playerDescription: {
+    fontSize: '11px',
+    color: 'rgba(156, 163, 175, 0.85)',
+    lineHeight: '17px',
+  } as const,
+
+  playerObservations: {
+    marginTop: '8px',
+    paddingTop: '8px',
+    borderTop: '1px solid rgba(75, 85, 99, 0.15)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+  } as const,
+
+  playerObservationItem: {
+    fontSize: '10px',
+    color: 'rgba(156, 163, 175, 0.7)',
+    paddingLeft: '10px',
+    position: 'relative' as const,
+  } as const,
+
+  playerObservationBullet: {
+    position: 'absolute' as const,
+    left: '0',
+    top: '5px',
+    width: '4px',
+    height: '4px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(168, 85, 247, 0.4)',
+  } as const,
 } as const;
 
 // ============================================================================
@@ -127,7 +183,36 @@ const styles = {
 export function TendencyCard({
   tendency,
   compact = false,
+  usePlayerLanguage = false,
 }: TendencyCardProps): React.ReactElement {
+  // Phase 9.3: Player language mode - simplified view
+  if (usePlayerLanguage) {
+    const playerText = mapTendencyToPlayerText(tendency);
+    if (!playerText) return <></>;
+
+    const filteredObservations = mapTendencyObservationsToPlayerText(tendency.observations);
+
+    return (
+      <div style={styles.playerContainer}>
+        <div style={styles.playerTitle}>{playerText.primary}</div>
+        {playerText.secondary && (
+          <div style={styles.playerDescription}>{playerText.secondary}</div>
+        )}
+        {!compact && filteredObservations.length > 0 && (
+          <div style={styles.playerObservations}>
+            {filteredObservations.map((obs, i) => (
+              <div key={i} style={styles.playerObservationItem}>
+                <span style={styles.playerObservationBullet} />
+                {obs}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Debug mode: full structural view
   const categoryColor = getTendencyCategoryColor(tendency.category);
   const categoryIcon = getTendencyCategoryIcon(tendency.category);
   const confidenceLabel = getConfidenceLabel(tendency.confidence);

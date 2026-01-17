@@ -1,6 +1,7 @@
 /**
  * LearningPanel.tsx
  * Phase 8.4 - Main learning panel component
+ * Phase 9.3 - Added player language support
  *
  * Integrates TendencyCard, ProgressTracker, and session summary.
  * Only visible when sufficient data is available.
@@ -23,6 +24,8 @@ interface LearningPanelProps {
   readonly collapsed?: boolean;
   readonly onToggle?: () => void;
   readonly compact?: boolean;
+  /** Phase 9.3: Use player-friendly language instead of structural data */
+  readonly usePlayerLanguage?: boolean;
 }
 
 // ============================================================================
@@ -205,6 +208,7 @@ export function LearningPanel({
   collapsed: controlledCollapsed,
   onToggle,
   compact = false,
+  usePlayerLanguage = false,
 }: LearningPanelProps): React.ReactElement | null {
   // Internal collapse state
   const [internalCollapsed, setInternalCollapsed] = useState(true);
@@ -317,6 +321,7 @@ export function LearningPanel({
                         key={tendency.id}
                         tendency={tendency}
                         compact={compact}
+                        usePlayerLanguage={usePlayerLanguage}
                       />
                     ))}
                   </div>

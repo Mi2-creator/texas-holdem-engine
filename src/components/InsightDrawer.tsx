@@ -1,6 +1,7 @@
 /**
  * InsightDrawer.tsx
  * Phase 9.2 - Drawer panel for Phase 6-8 insights
+ * Phase 9.3 - Uses player language adapter for all content
  *
  * A slide-in drawer that provides access to:
  * - Phase 6: Coach hints (real-time tips)
@@ -10,7 +11,7 @@
  * Design principles:
  * - Non-modal (doesn't block table view)
  * - Tabbed interface for organization
- * - Player-friendly language
+ * - Player-friendly language (via playerLanguage adapter)
  * - Can be dismissed easily
  */
 
@@ -320,7 +321,7 @@ export function InsightDrawer({
 
       case 'review':
         return isReviewAvailable && reviewInsight ? (
-          <ReviewPanel insight={reviewInsight} collapsed={false} compact={false} />
+          <ReviewPanel insight={reviewInsight} collapsed={false} compact={false} usePlayerLanguage={true} />
         ) : (
           <div style={styles.emptyState}>
             <div style={styles.emptyIcon}>📋</div>
@@ -338,6 +339,7 @@ export function InsightDrawer({
             heroSeat={heroSeat}
             collapsed={false}
             compact={false}
+            usePlayerLanguage={true}
           />
         ) : (
           <div style={styles.emptyState}>
