@@ -44,6 +44,94 @@
         100% { background-color: transparent; }
       }
 
+      /* ============================================ */
+      /* Phase L5: Live Game Animations              */
+      /* Purely presentational - safe to remove      */
+      /* ============================================ */
+
+      /* Card deal fade-in */
+      @keyframes card-deal {
+        0% {
+          opacity: 0;
+          transform: translateY(-10px) scale(0.95);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      /* Active player glow pulse */
+      @keyframes active-player-pulse {
+        0%, 100% {
+          box-shadow: 0 0 16px rgba(74, 222, 128, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 24px rgba(74, 222, 128, 0.7);
+        }
+      }
+
+      /* Win celebration glow */
+      @keyframes win-glow {
+        0%, 100% {
+          box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+        }
+        50% {
+          box-shadow: 0 0 40px rgba(168, 85, 247, 0.7);
+        }
+      }
+
+      /* Action indicator slide-in */
+      @keyframes action-slide {
+        0% {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Pot increase pulse */
+      @keyframes pot-pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+
+      /* Button press effect */
+      @keyframes button-press {
+        0% { transform: scale(1); }
+        50% { transform: scale(0.97); }
+        100% { transform: scale(1); }
+      }
+
+      /* Utility classes for animations */
+      .animate-card-deal {
+        animation: card-deal 0.3s ease-out;
+      }
+
+      .animate-active-player {
+        animation: active-player-pulse 2s ease-in-out infinite;
+      }
+
+      .animate-win-glow {
+        animation: win-glow 1.5s ease-in-out infinite;
+      }
+
+      .animate-action-slide {
+        animation: action-slide 0.25s ease-out;
+      }
+
+      .animate-pot-pulse {
+        animation: pot-pulse 0.3s ease-out;
+      }
+
+      .animate-button-press:active {
+        animation: button-press 0.1s ease-out;
+      }
+
       /* Base body styles */
       body {
         margin: 0;

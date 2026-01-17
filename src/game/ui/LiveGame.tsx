@@ -25,6 +25,17 @@ import { GameStatus } from './GameStatus';
 import { LiveActionPanel } from './LiveActionPanel';
 
 // ============================================================================
+// Display Helpers
+// ============================================================================
+
+/**
+ * Format chip amounts with commas for readability
+ */
+function formatChips(amount: number): string {
+  return amount.toLocaleString('en-US');
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -179,6 +190,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [message, setMessage] = useState<string>('');
   const [actionLog, setActionLog] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [lastActions, setLastActions] = useState<Record<number, string>>({});
 
   const controllerRef = useRef<GameController | null>(null);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
@@ -216,6 +228,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setMessage('');
     setActionLog([]);
     setCountdown(null);
+    setLastActions({});
 
     // Set up hero decision callback
     controllerRef.current.setHeroDecisionCallback(async (state, playerIndex) => {
@@ -232,6 +245,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       const actionStr = formatAction(event.action);
       const logEntry = `${event.street.toUpperCase()}: ${event.playerName} ${actionStr} (Pot: $${event.potAfter})`;
       setActionLog(prev => [...prev, logEntry]);
+      // Track last action per player for visual feedback
+      setLastActions(prev => ({ ...prev, [event.playerIndex]: actionStr }));
       setGameState(controllerRef.current!.getState());
     });
 
@@ -331,8 +346,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
           </div>
           <div style={styles.gameOverInfo}>
             {isHeroWinner
-              ? `Congratulations! You won with $${winner?.stack}`
-              : `${winner?.name} wins with $${winner?.stack}`}
+              ? `Congratulations! You won with $${formatChips(winner?.stack ?? 0)}`
+              : `${winner?.name} wins with $${formatChips(winner?.stack ?? 0)}`}
           </div>
           <button
             style={styles.restartButton}
@@ -407,6 +422,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         state={gameState}
         heroIndex={heroIndex}
         showOpponentCards={phase === 'complete' && result !== null && !result.endedByFold}
+        lastActions={lastActions}
       />
 
       {/* Action Panel */}
@@ -419,12 +435,12 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
 
       {/* Result Panel */}
       {phase === 'complete' && result && (
-        <div style={styles.resultPanel}>
+        <div className="animate-win-glow" style={styles.resultPanel}>
           <div style={styles.resultTitle}>
             {result.endedByFold ? 'Win by Fold' : 'Showdown'}
           </div>
           <div style={styles.resultInfo}>
-            <div><strong>{result.winnerNames.join(', ')}</strong> wins ${result.potSize}</div>
+            <div><strong>{result.winnerNames.join(', ')}</strong> wins ${formatChips(result.potSize)}</div>
             {!result.endedByFold && (
               <div style={{ marginTop: '8px', color: '#a855f7' }}>
                 {result.winningHandDescription}

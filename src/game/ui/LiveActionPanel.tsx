@@ -16,6 +16,17 @@ import { TableState } from '../engine/TableState';
 import { PlayerAction, getValidActions, ValidActions } from '../engine/BettingRound';
 
 // ============================================================================
+// Display Helpers
+// ============================================================================
+
+/**
+ * Format chip amounts with commas for readability
+ */
+function formatChips(amount: number): string {
+  return amount.toLocaleString('en-US');
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -102,7 +113,7 @@ const styles = {
   },
 
   betPreset: {
-    padding: '6px 12px',
+    padding: '6px 10px',
     borderRadius: '4px',
     border: '1px solid rgba(75, 85, 99, 0.3)',
     backgroundColor: 'rgba(75, 85, 99, 0.2)',
@@ -111,6 +122,20 @@ const styles = {
     fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.15s ease',
+  },
+
+  betRange: {
+    fontSize: '10px',
+    color: 'rgba(156, 163, 175, 0.6)',
+    marginTop: '4px',
+    textAlign: 'center' as const,
+  },
+
+  betControlsWrapper: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '4px',
   },
 
   waitingMessage: {
@@ -208,6 +233,7 @@ export function LiveActionPanel({
     <div style={styles.container}>
       {/* Fold */}
       <button
+        className="animate-button-press"
         style={{ ...styles.button, ...styles.foldButton }}
         onClick={handleFold}
         onMouseEnter={(e) => {
@@ -223,6 +249,7 @@ export function LiveActionPanel({
       {/* Check / Call */}
       {(validActions.canCheck || validActions.canCall) && (
         <button
+          className="animate-button-press"
           style={{ ...styles.button, ...styles.checkCallButton }}
           onClick={handleCheckCall}
           onMouseEnter={(e) => {
@@ -232,79 +259,105 @@ export function LiveActionPanel({
             e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
           }}
         >
-          {validActions.canCheck ? 'Check' : `Call $${validActions.callAmount}`}
+          {validActions.canCheck ? 'Check' : `Call $${formatChips(validActions.callAmount)}`}
         </button>
       )}
 
       {/* Bet / Raise */}
       {canBetOrRaise && (
-        <div style={styles.betControls}>
-          <button
-            style={{ ...styles.button, ...styles.betRaiseButton }}
-            onClick={handleBetRaise}
-            disabled={betAmount < minBetRaise || betAmount > maxBetRaise}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.35)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
-            }}
-          >
-            {betLabel} ${betAmount}
-          </button>
+        <div style={styles.betControlsWrapper}>
+          <div style={styles.betControls}>
+            <button
+              className="animate-button-press"
+              style={{
+                ...styles.button,
+                ...styles.betRaiseButton,
+                ...(betAmount < minBetRaise || betAmount > maxBetRaise ? styles.disabledButton : {}),
+              }}
+              onClick={handleBetRaise}
+              disabled={betAmount < minBetRaise || betAmount > maxBetRaise}
+              onMouseEnter={(e) => {
+                if (betAmount >= minBetRaise && betAmount <= maxBetRaise) {
+                  e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.35)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+              }}
+            >
+              {betLabel} ${formatChips(betAmount)}
+            </button>
 
-          <input
-            type="number"
-            style={styles.betInput}
-            value={betAmount}
-            onChange={handleBetChange}
-            min={minBetRaise}
-            max={maxBetRaise}
-          />
+            <input
+              type="number"
+              style={styles.betInput}
+              value={betAmount}
+              onChange={handleBetChange}
+              min={minBetRaise}
+              max={maxBetRaise}
+            />
 
-          {/* Preset buttons */}
-          <button
-            style={styles.betPreset}
-            onClick={() => setPresetBet(2)}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
-            }}
-          >
-            2x
-          </button>
-          <button
-            style={styles.betPreset}
-            onClick={() => setPresetBet(3)}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
-            }}
-          >
-            3x
-          </button>
-          <button
-            style={styles.betPreset}
-            onClick={() => setBetAmount(Math.floor(state.pot))}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
-            }}
-          >
-            Pot
-          </button>
+            {/* Preset buttons - Min, 1/2 Pot, Pot, Max */}
+            <button
+              style={styles.betPreset}
+              onClick={() => setBetAmount(minBetRaise)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
+              }}
+            >
+              Min
+            </button>
+            <button
+              style={styles.betPreset}
+              onClick={() => setBetAmount(Math.max(minBetRaise, Math.min(Math.floor(state.pot / 2), maxBetRaise)))}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
+              }}
+            >
+              ½ Pot
+            </button>
+            <button
+              style={styles.betPreset}
+              onClick={() => setBetAmount(Math.max(minBetRaise, Math.min(Math.floor(state.pot), maxBetRaise)))}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
+              }}
+            >
+              Pot
+            </button>
+            <button
+              style={styles.betPreset}
+              onClick={() => setBetAmount(maxBetRaise)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
+              }}
+            >
+              Max
+            </button>
+          </div>
+          {/* Range indicator */}
+          <div style={styles.betRange}>
+            Range: ${formatChips(minBetRaise)} - ${formatChips(maxBetRaise)}
+          </div>
         </div>
       )}
 
       {/* All-in */}
       {heroPlayer && heroPlayer.stack > 0 && (
         <button
+          className="animate-button-press"
           style={{ ...styles.button, ...styles.allInButton }}
           onClick={handleAllIn}
           onMouseEnter={(e) => {
@@ -314,7 +367,7 @@ export function LiveActionPanel({
             e.currentTarget.style.backgroundColor = 'rgba(168, 85, 247, 0.2)';
           }}
         >
-          All-In ${heroPlayer.stack}
+          All-In ${formatChips(heroPlayer.stack)}
         </button>
       )}
     </div>

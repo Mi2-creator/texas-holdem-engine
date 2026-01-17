@@ -13,6 +13,17 @@ import React from 'react';
 import { TableState, Street, getCurrentPlayer } from '../engine/TableState';
 
 // ============================================================================
+// Display Helpers
+// ============================================================================
+
+/**
+ * Format chip amounts with commas for readability
+ */
+function formatChips(amount: number): string {
+  return amount.toLocaleString('en-US');
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -154,12 +165,12 @@ export function GameStatus({
 
         <div style={styles.item}>
           <span style={styles.label}>Blinds</span>
-          <span style={styles.value}>${state.smallBlind} / ${state.bigBlind}</span>
+          <span style={styles.value}>${formatChips(state.smallBlind)} / ${formatChips(state.bigBlind)}</span>
         </div>
 
         <div style={styles.item}>
           <span style={styles.label}>Pot</span>
-          <span style={{ ...styles.value, color: '#fbbf24' }}>${state.pot}</span>
+          <span style={{ ...styles.value, color: '#fbbf24', fontSize: '16px' }}>${formatChips(state.pot)}</span>
         </div>
       </div>
 

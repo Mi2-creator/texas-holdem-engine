@@ -10,8 +10,31 @@
  */
 
 import React from 'react';
-import { Card, formatCard, SUIT_SYMBOLS } from '../engine/Card';
+import { Card, SUIT_SYMBOLS } from '../engine/Card';
 import { TableState, Player } from '../engine/TableState';
+
+// ============================================================================
+// Display Helpers
+// ============================================================================
+
+/**
+ * Format card for UI display - shows "10" instead of "T" for readability
+ */
+function formatCardDisplay(card: Card): string {
+  const rankDisplay: Record<number, string> = {
+    2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9',
+    10: '10', // Show "10" not "T" for clarity
+    11: 'J', 12: 'Q', 13: 'K', 14: 'A',
+  };
+  return `${rankDisplay[card.rank]}${SUIT_SYMBOLS[card.suit]}`;
+}
+
+/**
+ * Format chip amounts with commas for readability (e.g., 1000 -> "1,000")
+ */
+function formatChips(amount: number): string {
+  return amount.toLocaleString('en-US');
+}
 
 // ============================================================================
 // Types
@@ -21,6 +44,7 @@ interface LiveTableProps {
   readonly state: TableState;
   readonly heroIndex: number;
   readonly showOpponentCards: boolean;
+  readonly lastActions?: Record<number, string>;
 }
 
 // ============================================================================
@@ -124,6 +148,15 @@ const styles = {
     justifyContent: 'center',
     boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
   },
+
+  lastAction: {
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '11px',
+    fontWeight: 600,
+    marginTop: '4px',
+    textTransform: 'capitalize' as const,
+  },
 };
 
 // ============================================================================
@@ -148,6 +181,7 @@ function CardDisplay({ card, faceDown = false, size = 'medium' }: CardDisplayPro
   if (faceDown || !card) {
     return (
       <div
+        className="animate-card-deal"
         style={{
           width,
           height,
@@ -161,10 +195,11 @@ function CardDisplay({ card, faceDown = false, size = 'medium' }: CardDisplayPro
   }
 
   const isRed = card.suit === 'hearts' || card.suit === 'diamonds';
-  const display = formatCard(card);
+  const display = formatCardDisplay(card);
 
   return (
     <div
+      className="animate-card-deal"
       style={{
         width,
         height,
@@ -196,6 +231,7 @@ interface PlayerPositionProps {
   readonly isHero: boolean;
   readonly isActive: boolean;
   readonly showCards: boolean;
+  readonly lastAction?: string;
 }
 
 function PlayerPosition({
@@ -204,9 +240,20 @@ function PlayerPosition({
   isHero,
   isActive,
   showCards,
+  lastAction,
 }: PlayerPositionProps): React.ReactElement {
   const isFolded = player.status === 'folded';
   const isAllIn = player.status === 'all-in';
+
+  // Color for last action indicator
+  const getActionColor = (action: string): { bg: string; text: string } => {
+    if (action.includes('fold')) return { bg: 'rgba(239, 68, 68, 0.25)', text: '#ef4444' };
+    if (action.includes('check')) return { bg: 'rgba(156, 163, 175, 0.25)', text: '#9ca3af' };
+    if (action.includes('call')) return { bg: 'rgba(34, 197, 94, 0.25)', text: '#22c55e' };
+    if (action.includes('bet') || action.includes('raise')) return { bg: 'rgba(59, 130, 246, 0.25)', text: '#3b82f6' };
+    if (action.includes('ALL-IN')) return { bg: 'rgba(168, 85, 247, 0.3)', text: '#a855f7' };
+    return { bg: 'rgba(75, 85, 99, 0.25)', text: '#6b7280' };
+  };
 
   return (
     <div
@@ -239,6 +286,7 @@ function PlayerPosition({
 
       {/* Player Info */}
       <div
+        className={isActive ? 'animate-active-player' : undefined}
         style={{
           ...styles.playerInfo,
           ...(isActive ? styles.playerInfoActive : {}),
@@ -250,16 +298,30 @@ function PlayerPosition({
           {player.isDealer && ' 🔘'}
         </div>
         <div style={styles.playerStack}>
-          ${player.stack}
+          ${formatChips(player.stack)}
           {isAllIn && <span style={{ color: '#ef4444', marginLeft: 4 }}>ALL-IN</span>}
         </div>
         {player.currentBet > 0 && (
-          <div style={styles.playerBet}>Bet: ${player.currentBet}</div>
+          <div style={styles.playerBet}>Bet: ${formatChips(player.currentBet)}</div>
         )}
         {isFolded && (
           <div style={{ color: '#9ca3af', fontSize: 10 }}>FOLDED</div>
         )}
       </div>
+
+      {/* Last Action Indicator */}
+      {lastAction && !isFolded && (
+        <div
+          className="animate-action-slide"
+          style={{
+            ...styles.lastAction,
+            backgroundColor: getActionColor(lastAction).bg,
+            color: getActionColor(lastAction).text,
+          }}
+        >
+          {lastAction}
+        </div>
+      )}
     </div>
   );
 }
@@ -272,6 +334,7 @@ export function LiveTable({
   state,
   heroIndex,
   showOpponentCards,
+  lastActions = {},
 }: LiveTableProps): React.ReactElement {
   // Player positions for 2-player game
   const positions = [
@@ -283,8 +346,12 @@ export function LiveTable({
     <div style={styles.container}>
       {/* Pot Display */}
       {state.pot > 0 && (
-        <div style={styles.potDisplay}>
-          Pot: ${state.pot}
+        <div style={{
+          ...styles.potDisplay,
+          // Glow effect for larger pots
+          boxShadow: state.pot >= 100 ? '0 0 12px rgba(251, 191, 36, 0.4)' : undefined,
+        }}>
+          Pot: ${formatChips(state.pot)}
         </div>
       )}
 
@@ -310,6 +377,7 @@ export function LiveTable({
           isHero={index === heroIndex}
           isActive={index === state.activePlayerIndex && state.street !== 'showdown' && state.street !== 'complete'}
           showCards={showOpponentCards || index === heroIndex}
+          lastAction={lastActions[index]}
         />
       ))}
     </div>
