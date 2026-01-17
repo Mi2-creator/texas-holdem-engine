@@ -33,6 +33,16 @@ import { buildDecisionTimeline, type PlayerInfo } from './models/DecisionTimelin
 import { useSessionAccumulator } from './hooks/useSessionAccumulator';
 
 // ============================================================================
+// 【Phase 9.2】Insight Generation Imports
+// ============================================================================
+import {
+  getCoachHints,
+  buildCoachHintParams,
+  type RecentAction,
+} from './controllers/CoachHintEngine';
+import { generateReviewInsight } from './controllers/ReviewInsightEngine';
+
+// ============================================================================
 // 【Phase 9】Player Mode Imports
 // ============================================================================
 import { PlayerShell } from './components/PlayerShell';
@@ -206,6 +216,61 @@ function App() {
     );
   }, [currentEvents, viewModel.snapshot.players, viewModel.index, heroSeat]);
 
+  // ============================================================================
+  // 【Phase 9.2】Coach Hints & Review Insight for Player Mode
+  // ============================================================================
+  const coachHints = useMemo(() => {
+    const safeEvents = currentEvents ?? [];
+    const safePlayers = viewModel.snapshot.players ?? [];
+
+    const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+      id: p?.id ?? '',
+      name: p?.name ?? 'Unknown',
+      seat: p?.seat,
+    }));
+
+    const timeline = buildDecisionTimeline(safeEvents, playerInfos, heroSeat);
+
+    const recentActions: RecentAction[] = timeline
+      .slice(Math.max(0, viewModel.index - 5), viewModel.index + 1)
+      .map(dp => ({
+        actionClass: dp.actionClass,
+        playerId: dp.playerId,
+        isHero: dp.isHeroDecision,
+        amount: dp.amount,
+      }));
+
+    const params = buildCoachHintParams(
+      viewModeResult.contextBar,
+      viewModeResult.mode,
+      recentActions,
+      undefined
+    );
+
+    return getCoachHints(params);
+  }, [currentEvents, viewModel.snapshot.players, viewModel.index, heroSeat, viewModeResult]);
+
+  const reviewInsight = useMemo(() => {
+    const safeEvents = currentEvents ?? [];
+    const safePlayers = viewModel.snapshot.players ?? [];
+
+    const playerInfos: PlayerInfo[] = safePlayers.map(p => ({
+      id: p?.id ?? '',
+      name: p?.name ?? 'Unknown',
+      seat: p?.seat,
+    }));
+
+    const timeline = buildDecisionTimeline(safeEvents, playerInfos, heroSeat);
+
+    return generateReviewInsight({
+      events: safeEvents,
+      players: playerInfos,
+      heroSeat,
+      timeline,
+      handEndReason: viewModel.snapshot.handEndReason,
+    });
+  }, [currentEvents, viewModel.snapshot.players, heroSeat, viewModel.snapshot.handEndReason]);
+
   return (
     <div style={{ padding: viewMode === 'debug' ? 20 : 0 }}>
       {/* 视图模式切换 - 仅在 Debug 模式下显示完整控制 */}
@@ -365,6 +430,11 @@ function App() {
             />
           }
           showHandCompleteBadge={true}
+          // Phase 9.2: Insight Access Props
+          coachHints={coachHints}
+          reviewInsight={reviewInsight}
+          handHistories={session.handHistories}
+          enableLearning={enableLearning}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 /**
  * PlayerShell.tsx
  * Phase 9.1 - Main container for Player Mode
+ * Phase 9.2 - Integrated Insight Access (InsightTrigger + InsightDrawer)
  *
  * Design principles:
  * - Table is the primary visual focus (70%+ visual weight)
@@ -12,10 +13,15 @@
  * player-oriented controls, hiding technical details by default.
  */
 
-import React from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import type { ReplayViewModel, PlayerActions } from '../types/replay';
 import type { ViewModeResult } from '../controllers/ViewModeController';
+import type { CoachHint } from '../controllers/CoachHintEngine';
+import type { ReviewInsight } from '../controllers/ReviewInsightEngine';
+import type { HandHistory } from '../controllers/LearningProfileEngine';
 import { PlayerControlBar } from './PlayerControlBar';
+import { InsightTrigger } from './InsightTrigger';
+import { InsightDrawer } from './InsightDrawer';
 
 // ============================================================================
 // Types
@@ -32,14 +38,21 @@ interface PlayerShellProps {
   readonly heroSeat: number;
   /** Table content to render */
   readonly tableContent: React.ReactNode;
-  /** Optional: insight trigger content (Phase 9.2) */
-  readonly insightTrigger?: React.ReactNode;
   /** Optional: hand end card content (Phase 9.4) */
   readonly handEndCard?: React.ReactNode;
-  /** Optional: callback when insight is requested */
-  readonly onInsightRequest?: () => void;
   /** Optional: show hand complete badge in control bar */
   readonly showHandCompleteBadge?: boolean;
+  // ============================================================================
+  // Phase 9.2: Insight Access Props
+  // ============================================================================
+  /** Phase 6: Coach hints */
+  readonly coachHints?: readonly CoachHint[];
+  /** Phase 7: Review insight */
+  readonly reviewInsight?: ReviewInsight;
+  /** Phase 8: Hand histories for learning */
+  readonly handHistories?: readonly HandHistory[];
+  /** Whether learning is enabled */
+  readonly enableLearning?: boolean;
 }
 
 // ============================================================================
@@ -211,14 +224,47 @@ export function PlayerShell({
   viewModeResult,
   heroSeat,
   tableContent,
-  insightTrigger,
   handEndCard,
-  onInsightRequest,
   showHandCompleteBadge = true,
+  // Phase 9.2: Insight props
+  coachHints = [],
+  reviewInsight,
+  handHistories = [],
+  enableLearning = false,
 }: PlayerShellProps): React.ReactElement {
   const { snapshot } = viewModel;
   const street = snapshot.street || snapshot.phase;
   const isHandOver = snapshot.isHandOver;
+
+  // ============================================================================
+  // Phase 9.2: Insight Drawer State
+  // ============================================================================
+  const [isInsightDrawerOpen, setIsInsightDrawerOpen] = useState(false);
+
+  const toggleInsightDrawer = useCallback(() => {
+    setIsInsightDrawerOpen(prev => !prev);
+  }, []);
+
+  const closeInsightDrawer = useCallback(() => {
+    setIsInsightDrawerOpen(false);
+  }, []);
+
+  // Calculate if there are any insights available
+  const hasInsights = useMemo(() => {
+    const hasHints = coachHints.length > 0;
+    const hasReview = isHandOver && reviewInsight?.isAvailable;
+    const hasLearning = enableLearning && handHistories.length >= 2;
+    return hasHints || hasReview || hasLearning;
+  }, [coachHints, isHandOver, reviewInsight, enableLearning, handHistories]);
+
+  // Count total insights for badge
+  const insightCount = useMemo(() => {
+    let count = coachHints.length;
+    if (isHandOver && reviewInsight?.keyDecisions) {
+      count += reviewInsight.keyDecisions.length;
+    }
+    return count;
+  }, [coachHints, isHandOver, reviewInsight]);
 
   return (
     <div style={styles.container}>
@@ -248,12 +294,15 @@ export function PlayerShell({
         <div style={styles.tableWrapper}>
           {tableContent}
 
-          {/* Insight Trigger (Phase 9.2 slot) */}
-          {insightTrigger && (
-            <div style={styles.insightTriggerContainer}>
-              {insightTrigger}
-            </div>
-          )}
+          {/* Phase 9.2: Insight Trigger */}
+          <div style={styles.insightTriggerContainer}>
+            <InsightTrigger
+              hasInsights={hasInsights}
+              insightCount={insightCount}
+              isOpen={isInsightDrawerOpen}
+              onClick={toggleInsightDrawer}
+            />
+          </div>
         </div>
 
         {/* Hand End Card (Phase 9.4 slot) */}
@@ -289,6 +338,18 @@ export function PlayerShell({
           50% { opacity: 0.6; }
         }
       `}</style>
+
+      {/* Phase 9.2: Insight Drawer */}
+      <InsightDrawer
+        isOpen={isInsightDrawerOpen}
+        onClose={closeInsightDrawer}
+        coachHints={coachHints}
+        reviewInsight={reviewInsight}
+        handHistories={handHistories}
+        heroSeat={heroSeat}
+        isHandComplete={isHandOver}
+        enableLearning={enableLearning}
+      />
     </div>
   );
 }
