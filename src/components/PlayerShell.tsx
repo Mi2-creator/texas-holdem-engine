@@ -4,6 +4,7 @@
  * Phase 9.2 - Integrated Insight Access (InsightTrigger + InsightDrawer)
  * Phase 9.4 - Integrated HandEndCard
  * Phase 9.5 - Integrated compact ModeSwitcher
+ * Phase 9.6 - Integrated WelcomeOverlay
  *
  * Design principles:
  * - Table is the primary visual focus (70%+ visual weight)
@@ -26,6 +27,13 @@ import { InsightTrigger } from './InsightTrigger';
 import { InsightDrawer } from './InsightDrawer';
 import { HandEndCard } from './HandEndCard';
 import { ViewModeToggle, type ViewMode } from './ViewModeToggle';
+import { WelcomeOverlay } from './WelcomeOverlay';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const WELCOME_DISMISSED_KEY = 'poker-ui-welcome-dismissed';
 
 // ============================================================================
 // Types
@@ -311,6 +319,38 @@ export function PlayerShell({
     openInsightDrawerToReview();
   }, [openInsightDrawerToReview]);
 
+  // ============================================================================
+  // Phase 9.6: WelcomeOverlay State
+  // ============================================================================
+  const [isWelcomeVisible, setIsWelcomeVisible] = useState(false);
+
+  // Check localStorage on mount to determine if welcome should be shown
+  useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem(WELCOME_DISMISSED_KEY);
+      if (dismissed !== 'true') {
+        // Show welcome overlay on first visit
+        setIsWelcomeVisible(true);
+      }
+    } catch {
+      // localStorage not available, show welcome anyway
+      setIsWelcomeVisible(true);
+    }
+  }, []);
+
+  const dismissWelcome = useCallback(() => {
+    setIsWelcomeVisible(false);
+  }, []);
+
+  const dismissWelcomePermanently = useCallback(() => {
+    setIsWelcomeVisible(false);
+    try {
+      localStorage.setItem(WELCOME_DISMISSED_KEY, 'true');
+    } catch {
+      // localStorage not available, silently fail
+    }
+  }, []);
+
   // Calculate if there are any insights available
   const hasInsights = useMemo(() => {
     const hasHints = coachHints.length > 0;
@@ -425,6 +465,13 @@ export function PlayerShell({
         heroSeat={heroSeat}
         isHandComplete={isHandOver}
         enableLearning={enableLearning}
+      />
+
+      {/* Phase 9.6: Welcome Overlay */}
+      <WelcomeOverlay
+        isVisible={isWelcomeVisible}
+        onDismiss={dismissWelcome}
+        onDontShowAgain={dismissWelcomePermanently}
       />
     </div>
   );
