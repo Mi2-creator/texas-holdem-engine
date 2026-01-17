@@ -32,6 +32,11 @@ import { buildDecisionTimeline, type PlayerInfo } from './models/DecisionTimelin
 // ============================================================================
 import { useSessionAccumulator } from './hooks/useSessionAccumulator';
 
+// ============================================================================
+// 【Phase 9】Player Mode Imports
+// ============================================================================
+import { PlayerShell } from './components/PlayerShell';
+
 // 数据源配置（UI 层定义，不依赖 replay 类型）
 const DATA_SOURCES = {
   'demo-fold': { name: 'Demo (Fold Ending)', events: demoEvents },
@@ -202,9 +207,17 @@ function App() {
   }, [currentEvents, viewModel.snapshot.players, viewModel.index, heroSeat]);
 
   return (
-    <div style={{ padding: 20 }}>
-      {/* 视图模式切换 */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', gap: 16, alignItems: 'center' }}>
+    <div style={{ padding: viewMode === 'debug' ? 20 : 0 }}>
+      {/* 视图模式切换 - 仅在 Debug 模式下显示完整控制 */}
+      <div style={{
+        marginBottom: viewMode === 'debug' ? 16 : 0,
+        padding: viewMode === 'player' ? '12px 20px' : 0,
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 16,
+        alignItems: 'center',
+        backgroundColor: viewMode === 'player' ? 'rgba(15, 15, 20, 0.95)' : 'transparent',
+      }}>
         <ViewModeToggle mode={viewMode} onModeChange={setViewMode} />
 
         {/* G 阶段：执行模式切换（仅 Debug View 可见） */}
@@ -332,9 +345,15 @@ function App() {
           }
         />
       ) : (
-        <>
-          {/* Player View - 简化版，仍使用 Hero 增强桌面 */}
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+        /* ================================================================ */
+        /* 【Phase 9】Player Mode - Clean, player-focused experience       */
+        /* ================================================================ */
+        <PlayerShell
+          viewModel={viewModel}
+          actions={actions}
+          viewModeResult={viewModeResult}
+          heroSeat={heroSeat}
+          tableContent={
             <HeroPokerTable
               viewModel={viewModel}
               viewModeResult={viewModeResult}
@@ -344,21 +363,9 @@ function App() {
               currentEventAmount={currentEvent?.amount}
               previousPotTotal={previousPotTotal}
             />
-          </div>
-          <div style={{ marginTop: 20 }}>
-            <PlayerHUD
-              viewModel={viewModel}
-              actions={actions}
-              currentEventDescription={currentEventDescription}
-              selectedPlayerId={selectedPlayerId}
-              playerOptions={playerOptions}
-              onPlayerSelect={setSelectedPlayerId}
-              executor={executor}
-              events={currentEvents}
-              previousSnapshot={previousSnapshot}
-            />
-          </div>
-        </>
+          }
+          showHandCompleteBadge={true}
+        />
       )}
     </div>
   );
