@@ -2,6 +2,7 @@
  * PlayerShell.tsx
  * Phase 9.1 - Main container for Player Mode
  * Phase 9.2 - Integrated Insight Access (InsightTrigger + InsightDrawer)
+ * Phase 9.4 - Integrated HandEndCard
  *
  * Design principles:
  * - Table is the primary visual focus (70%+ visual weight)
@@ -13,7 +14,7 @@
  * player-oriented controls, hiding technical details by default.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { ReplayViewModel, PlayerActions } from '../types/replay';
 import type { ViewModeResult } from '../controllers/ViewModeController';
 import type { CoachHint } from '../controllers/CoachHintEngine';
@@ -22,6 +23,7 @@ import type { HandHistory } from '../controllers/LearningProfileEngine';
 import { PlayerControlBar } from './PlayerControlBar';
 import { InsightTrigger } from './InsightTrigger';
 import { InsightDrawer } from './InsightDrawer';
+import { HandEndCard } from './HandEndCard';
 
 // ============================================================================
 // Types
@@ -38,8 +40,6 @@ interface PlayerShellProps {
   readonly heroSeat: number;
   /** Table content to render */
   readonly tableContent: React.ReactNode;
-  /** Optional: hand end card content (Phase 9.4) */
-  readonly handEndCard?: React.ReactNode;
   /** Optional: show hand complete badge in control bar */
   readonly showHandCompleteBadge?: boolean;
   // ============================================================================
@@ -53,6 +53,13 @@ interface PlayerShellProps {
   readonly handHistories?: readonly HandHistory[];
   /** Whether learning is enabled */
   readonly enableLearning?: boolean;
+  // ============================================================================
+  // Phase 9.4: HandEndCard Props
+  // ============================================================================
+  /** Current pot total for hand end display */
+  readonly potTotal?: number;
+  /** Whether to show hand end card (default true) */
+  readonly showHandEndCard?: boolean;
 }
 
 // ============================================================================
@@ -224,13 +231,15 @@ export function PlayerShell({
   viewModeResult,
   heroSeat,
   tableContent,
-  handEndCard,
   showHandCompleteBadge = true,
   // Phase 9.2: Insight props
   coachHints = [],
   reviewInsight,
   handHistories = [],
   enableLearning = false,
+  // Phase 9.4: HandEndCard props
+  potTotal,
+  showHandEndCard = true,
 }: PlayerShellProps): React.ReactElement {
   const { snapshot } = viewModel;
   const street = snapshot.street || snapshot.phase;
@@ -248,6 +257,39 @@ export function PlayerShell({
   const closeInsightDrawer = useCallback(() => {
     setIsInsightDrawerOpen(false);
   }, []);
+
+  const openInsightDrawerToReview = useCallback(() => {
+    setIsInsightDrawerOpen(true);
+  }, []);
+
+  // ============================================================================
+  // Phase 9.4: HandEndCard State
+  // ============================================================================
+  const [isHandEndCardVisible, setIsHandEndCardVisible] = useState(false);
+  const prevIsHandOverRef = useRef(isHandOver);
+
+  // Show HandEndCard when hand transitions to over state
+  useEffect(() => {
+    if (isHandOver && !prevIsHandOverRef.current && showHandEndCard) {
+      setIsHandEndCardVisible(true);
+    }
+    prevIsHandOverRef.current = isHandOver;
+  }, [isHandOver, showHandEndCard]);
+
+  // Reset HandEndCard when hand changes (new hand starts)
+  useEffect(() => {
+    if (!isHandOver) {
+      setIsHandEndCardVisible(false);
+    }
+  }, [isHandOver]);
+
+  const dismissHandEndCard = useCallback(() => {
+    setIsHandEndCardVisible(false);
+  }, []);
+
+  const handleReviewFromCard = useCallback(() => {
+    openInsightDrawerToReview();
+  }, [openInsightDrawerToReview]);
 
   // Calculate if there are any insights available
   const hasInsights = useMemo(() => {
@@ -305,12 +347,15 @@ export function PlayerShell({
           </div>
         </div>
 
-        {/* Hand End Card (Phase 9.4 slot) */}
-        {handEndCard && isHandOver && (
-          <div style={styles.handEndCardContainer}>
-            {handEndCard}
-          </div>
-        )}
+        {/* Phase 9.4: Hand End Card */}
+        <HandEndCard
+          isVisible={isHandEndCardVisible}
+          handEndReason={snapshot.handEndReason}
+          potTotal={potTotal}
+          patternSummary={reviewInsight?.patterns}
+          onDismiss={dismissHandEndCard}
+          onReviewClick={handleReviewFromCard}
+        />
       </div>
 
       {/* Control Section */}

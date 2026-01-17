@@ -435,6 +435,8 @@ function App() {
           reviewInsight={reviewInsight}
           handHistories={session.handHistories}
           enableLearning={enableLearning}
+          // Phase 9.4: HandEndCard Props
+          potTotal={viewModel.snapshot.potTotal}
         />
       )}
     </div>
