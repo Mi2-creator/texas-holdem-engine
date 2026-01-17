@@ -59,6 +59,14 @@ import { ActionStatisticsPanel } from './ActionStatisticsPanel';
 import { StreetSummaryPanel } from './StreetSummaryPanel';
 import { BettingFlowDiagram } from './BettingFlowDiagram';
 import { PotOddsDisplay } from './PotOddsDisplay';
+import { CoachHintPanel } from './CoachHintPanel';
+import {
+  getCoachHints,
+  buildCoachHintParams,
+  type RecentAction,
+} from '../controllers/CoachHintEngine';
+import { ReviewPanel } from './ReviewPanel';
+import { generateReviewInsight } from '../controllers/ReviewInsightEngine';
 
 /**
  * 数据源选项
@@ -179,6 +187,38 @@ export function ReplayDebugPanel({
   );
 
   const { mode: viewMode, panelVisibility, contextBar, highlightDecision } = viewModeResult;
+
+  // ========================================
+  // 【Phase 6】Coach Hint Calculation
+  // ========================================
+  const recentActions: RecentAction[] = timeline
+    .slice(Math.max(0, viewModel.index - 5), viewModel.index + 1)
+    .map(dp => ({
+      actionClass: dp.actionClass,
+      playerId: dp.playerId,
+      isHero: dp.isHeroDecision,
+      amount: dp.amount,
+    }));
+
+  const coachHintParams = buildCoachHintParams(
+    contextBar,
+    viewMode,
+    recentActions,
+    undefined // potGrowthRate - can be calculated if needed
+  );
+
+  const coachHints = getCoachHints(coachHintParams);
+
+  // ========================================
+  // 【Phase 7】Review Insight Calculation
+  // ========================================
+  const reviewInsight = generateReviewInsight({
+    events: safeEvents,
+    players: playerInfos,
+    heroSeat: 0,
+    timeline,
+    handEndReason: viewModel.snapshot.handEndReason,
+  });
 
   // Panel theme colors
   const panelColors = {
@@ -576,6 +616,22 @@ export function ReplayDebugPanel({
               />
             </MinimalErrorBoundary>
           </CollapsiblePanel>
+
+          {/* ================================================================ */}
+          {/* 【Phase 6】Coach Hint Panel - 教练提示面板 */}
+          {/* 低干扰、可折叠的策略提示 */}
+          {/* ================================================================ */}
+          {coachHints.length > 0 && (
+            <CoachHintPanel hints={coachHints} />
+          )}
+
+          {/* ================================================================ */}
+          {/* 【Phase 7】Review Panel - 事后复盘学习面板 */}
+          {/* 仅在 HAND_END / SHOWDOWN 后可见 */}
+          {/* ================================================================ */}
+          {reviewInsight.isAvailable && (
+            <ReviewPanel insight={reviewInsight} compact={true} />
+          )}
         </div>
       )}
 
