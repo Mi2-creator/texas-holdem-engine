@@ -276,9 +276,9 @@ export function LearningPanel({
             📊
           </div>
           <div style={styles.titleSection}>
-            <span style={styles.title}>Learning Insights</span>
+            <span style={styles.title}>My Playing Style</span>
             <span style={styles.subtitle}>
-              {learningProfile.sessionSummary.handsPlayed} hands analyzed
+              {learningProfile.sessionSummary.handsPlayed} hands tracked
             </span>
           </div>
         </div>
@@ -286,7 +286,7 @@ export function LearningPanel({
         <div style={styles.entryBarRight}>
           {isCollapsed && hasTendencies && (
             <span style={styles.tendencyBadge}>
-              {learningProfile.tendencies.length} pattern{learningProfile.tendencies.length > 1 ? 's' : ''}
+              {learningProfile.tendencies.length} tendenc{learningProfile.tendencies.length > 1 ? 'ies' : 'y'}
             </span>
           )}
           <span
@@ -309,7 +309,7 @@ export function LearningPanel({
               {hasTendencies ? (
                 <>
                   <div style={styles.sectionHeader}>
-                    <span style={styles.sectionTitle}>Observed Tendencies</span>
+                    <span style={styles.sectionTitle}>Your Tendencies</span>
                     <span style={styles.sectionCount}>
                       {learningProfile.tendencies.length}
                     </span>
@@ -329,9 +329,9 @@ export function LearningPanel({
               ) : (
                 <div style={styles.emptyState}>
                   <div style={styles.emptyIcon}>🔍</div>
-                  <div>No clear patterns detected yet.</div>
+                  <div>No clear tendencies yet.</div>
                   <div style={{ marginTop: '4px', opacity: 0.7 }}>
-                    More hands will reveal decision tendencies.
+                    Play more hands to see tendencies.
                   </div>
                 </div>
               )}
@@ -360,7 +360,7 @@ export function LearningPanel({
               e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
             }}
           >
-            Close Learning Panel
+            Close
           </button>
         </div>
       )}

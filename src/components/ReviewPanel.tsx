@@ -296,7 +296,7 @@ export function ReviewPanel({
             </>
           ) : (
             <div style={styles.emptyState}>
-              No key decision points identified in this hand.
+              No major decision points in this hand.
             </div>
           )}
 

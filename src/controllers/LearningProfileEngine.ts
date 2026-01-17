@@ -544,7 +544,7 @@ function buildSessionSummary(
   const keyDecisionsReviewed = decisions.length;
 
   // Determine dominant tendency
-  let dominantTendency = 'No clear pattern yet';
+  let dominantTendency = 'No clear tendency yet';
   if (tendencies.length > 0) {
     const highestConfidence = tendencies.reduce((best, t) => {
       const confidenceOrder = { high: 3, medium: 2, low: 1 };
@@ -556,9 +556,9 @@ function buildSessionSummary(
   // Generate session insight
   let sessionInsight: string;
   if (handsPlayed < 3) {
-    sessionInsight = 'Early session. More hands will reveal clearer patterns.';
+    sessionInsight = 'Early session. Play more hands to see tendencies.';
   } else if (decisions.length < 5) {
-    sessionInsight = 'Limited key decision data. Patterns may emerge with more play.';
+    sessionInsight = 'Not many big decisions yet. Play more hands.';
   } else {
     const pressureCount = decisions.filter(
       d => d.pressureLevel === 'high' || d.pressureLevel === 'critical'
@@ -658,8 +658,8 @@ function createEmptyProfile(): LearningProfile {
       handsPlayed: 0,
       totalDecisions: 0,
       keyDecisionsReviewed: 0,
-      dominantTendency: 'Insufficient data',
-      sessionInsight: 'Complete more hands to see learning insights.',
+      dominantTendency: 'Need more hands',
+      sessionInsight: 'Play more hands to see your tendencies.',
     },
     isAvailable: false,
   };
@@ -700,9 +700,9 @@ export function getTendencyCategoryIcon(category: TendencyCategory): string {
  */
 export function getConfidenceLabel(confidence: 'low' | 'medium' | 'high'): string {
   switch (confidence) {
-    case 'high': return 'Strong pattern';
-    case 'medium': return 'Emerging pattern';
-    case 'low': return 'Early observation';
+    case 'high': return 'Clear tendency';
+    case 'medium': return 'Starting to see a tendency';
+    case 'low': return 'Just a few hands so far';
     default: return '';
   }
 }

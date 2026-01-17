@@ -346,9 +346,9 @@ export function InsightDrawer({
             <div style={styles.emptyIcon}>📊</div>
             <div style={styles.emptyText}>
               Play more hands to see<br />
-              your decision patterns.
+              your tendencies.
               {handHistories.length === 1 && (
-                <><br /><br />1 hand tracked. Need 2+ hands.</>
+                <><br /><br />1 hand so far. Need at least 2.</>
               )}
             </div>
           </div>

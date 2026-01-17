@@ -96,7 +96,7 @@ function checkPotEscalation(params: CoachHintParams): CoachHint | null {
   return {
     id: 'pot-escalation',
     level: 'caution',
-    text: 'Pot escalation detected. Reassess commitment.',
+    text: 'The pot grew quickly. Big decision coming up.',
     timing: 'pre-action',
   };
 }
@@ -119,7 +119,7 @@ function checkAggressionPattern(params: CoachHintParams): CoachHint | null {
   return {
     id: 'aggression-pattern',
     level: 'caution',
-    text: 'Aggression pattern emerging. Expect pressure.',
+    text: 'Lots of betting action. Expect pressure.',
     timing: 'pre-action',
   };
 }
@@ -135,7 +135,7 @@ function checkElevatedPressure(params: CoachHintParams): CoachHint | null {
   return {
     id: 'elevated-pressure',
     level: 'info',
-    text: 'Elevated pressure. Consider position and range.',
+    text: 'Pressure is building. Take your time.',
     timing: 'hero-turn',
   };
 }
@@ -166,7 +166,7 @@ function checkComparisonModeHint(params: CoachHintParams): CoachHint | null {
   return {
     id: 'comparison-mode',
     level: 'info',
-    text: 'Review alternatives before deciding.',
+    text: 'This is a key spot.',
     timing: 'hero-turn',
   };
 }
