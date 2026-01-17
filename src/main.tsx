@@ -274,14 +274,14 @@ function App() {
   return (
     <div style={{ padding: viewMode === 'debug' ? 20 : 0 }}>
       {/* 视图模式切换 - 仅在 Debug 模式下显示完整控制 */}
+      {/* Phase 9.5: Player mode 使用 PlayerShell 内置的 compact switcher */}
+      {viewMode === 'debug' && (
       <div style={{
-        marginBottom: viewMode === 'debug' ? 16 : 0,
-        padding: viewMode === 'player' ? '12px 20px' : 0,
+        marginBottom: 16,
         display: 'flex',
         justifyContent: 'center',
         gap: 16,
         alignItems: 'center',
-        backgroundColor: viewMode === 'player' ? 'rgba(15, 15, 20, 0.95)' : 'transparent',
       }}>
         <ViewModeToggle mode={viewMode} onModeChange={setViewMode} />
 
@@ -368,6 +368,7 @@ function App() {
           </div>
         )}
       </div>
+      )}
 
       {/* ================================================================ */}
       {/* 【Phase 5】Table-First Experience Layout */}
@@ -437,6 +438,9 @@ function App() {
           enableLearning={enableLearning}
           // Phase 9.4: HandEndCard Props
           potTotal={viewModel.snapshot.potTotal}
+          // Phase 9.5: Mode Switcher Props
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
         />
       )}
     </div>

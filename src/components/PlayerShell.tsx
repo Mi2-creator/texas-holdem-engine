@@ -3,6 +3,7 @@
  * Phase 9.1 - Main container for Player Mode
  * Phase 9.2 - Integrated Insight Access (InsightTrigger + InsightDrawer)
  * Phase 9.4 - Integrated HandEndCard
+ * Phase 9.5 - Integrated compact ModeSwitcher
  *
  * Design principles:
  * - Table is the primary visual focus (70%+ visual weight)
@@ -24,6 +25,7 @@ import { PlayerControlBar } from './PlayerControlBar';
 import { InsightTrigger } from './InsightTrigger';
 import { InsightDrawer } from './InsightDrawer';
 import { HandEndCard } from './HandEndCard';
+import { ViewModeToggle, type ViewMode } from './ViewModeToggle';
 
 // ============================================================================
 // Types
@@ -60,6 +62,13 @@ interface PlayerShellProps {
   readonly potTotal?: number;
   /** Whether to show hand end card (default true) */
   readonly showHandEndCard?: boolean;
+  // ============================================================================
+  // Phase 9.5: Mode Switcher Props
+  // ============================================================================
+  /** Current view mode */
+  readonly viewMode?: ViewMode;
+  /** Callback when view mode changes */
+  readonly onViewModeChange?: (mode: ViewMode) => void;
 }
 
 // ============================================================================
@@ -124,6 +133,14 @@ const styles = {
     left: '50%',
     transform: 'translate(-50%, -50%)',
     zIndex: 20,
+  } as const,
+
+  // Phase 9.5: Mode switcher in top-left corner
+  modeSwitcherContainer: {
+    position: 'absolute' as const,
+    top: '20px',
+    left: '20px',
+    zIndex: 10,
   } as const,
 
   controlSection: {
@@ -240,6 +257,9 @@ export function PlayerShell({
   // Phase 9.4: HandEndCard props
   potTotal,
   showHandEndCard = true,
+  // Phase 9.5: Mode switcher props
+  viewMode,
+  onViewModeChange,
 }: PlayerShellProps): React.ReactElement {
   const { snapshot } = viewModel;
   const street = snapshot.street || snapshot.phase;
@@ -336,7 +356,18 @@ export function PlayerShell({
         <div style={styles.tableWrapper}>
           {tableContent}
 
-          {/* Phase 9.2: Insight Trigger */}
+          {/* Phase 9.5: Compact Mode Switcher (top-left) */}
+          {viewMode && onViewModeChange && (
+            <div style={styles.modeSwitcherContainer}>
+              <ViewModeToggle
+                mode={viewMode}
+                onModeChange={onViewModeChange}
+                compact={true}
+              />
+            </div>
+          )}
+
+          {/* Phase 9.2: Insight Trigger (bottom-right) */}
           <div style={styles.insightTriggerContainer}>
             <InsightTrigger
               hasInsights={hasInsights}
