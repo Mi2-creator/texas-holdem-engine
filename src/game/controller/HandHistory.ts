@@ -228,3 +228,62 @@ export function getEventStyleType(event: HandHistoryEvent): EventStyleType {
       return 'info';
   }
 }
+
+// ============================================================================
+// Export Functions (Phase L11)
+// ============================================================================
+
+/**
+ * Export hand history as human-readable text format.
+ * Suitable for sharing or archiving.
+ */
+export function exportHandHistoryAsText(
+  events: readonly HandHistoryEvent[],
+  handNumber: number
+): string {
+  const lines: string[] = [
+    '========================================',
+    `Texas Hold\'em - Hand #${handNumber}`,
+    `Exported: ${new Date().toLocaleString()}`,
+    '========================================',
+    '',
+  ];
+
+  for (const event of events) {
+    lines.push(formatHistoryEvent(event));
+  }
+
+  lines.push('');
+  lines.push('========================================');
+
+  return lines.join('\n');
+}
+
+/**
+ * Export hand history as JSON format.
+ * Suitable for data analysis, replay, or backup.
+ */
+export function exportHandHistoryAsJSON(
+  events: readonly HandHistoryEvent[],
+  handNumber: number
+): string {
+  const exportData = {
+    version: HAND_HISTORY_VERSION,
+    exportedAt: new Date().toISOString(),
+    handNumber,
+    events,
+  };
+
+  return JSON.stringify(exportData, null, 2);
+}
+
+/**
+ * Generate a filename for hand history export
+ */
+export function generateExportFilename(
+  handNumber: number,
+  format: 'txt' | 'json'
+): string {
+  const timestamp = new Date().toISOString().slice(0, 10);
+  return `hand-${handNumber}-${timestamp}.${format}`;
+}

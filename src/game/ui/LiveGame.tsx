@@ -35,6 +35,7 @@ import {
   ReplaySpeed,
   createInitialReplayState,
 } from './ReplayControls';
+import { ExportControls } from './ExportControls';
 
 // ============================================================================
 // Display Helpers
@@ -206,6 +207,13 @@ const styles = {
 
   replayControlsContainer: {
     marginTop: '8px',
+  },
+
+  historyHeaderRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px',
   },
 
   countdown: {
@@ -915,8 +923,16 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       {/* Hand History Log */}
       {handHistory.length > 0 && (
         <div style={styles.actionLog}>
-          <div style={styles.actionLogTitle}>
-            {replayState.isReplaying ? 'Replay Mode' : 'Hand History'}
+          <div style={styles.historyHeaderRow}>
+            <div style={styles.actionLogTitle}>
+              {replayState.isReplaying ? 'Replay Mode' : 'Hand History'}
+            </div>
+            {phase === 'complete' && !replayState.isReplaying && (
+              <ExportControls
+                events={handHistory}
+                handNumber={handCount}
+              />
+            )}
           </div>
           {handHistory.map((event, i) => {
             const styleType = getEventStyleType(event);
