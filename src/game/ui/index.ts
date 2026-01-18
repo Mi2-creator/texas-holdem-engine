@@ -1,7 +1,7 @@
 /**
- * Game UI - Phase L11
+ * Game UI - Phase L12
  *
- * Live game UI components with replay and export support.
+ * Live game UI components with replay, export, and session stats.
  */
 
 export * from './LiveTable';
@@ -10,3 +10,4 @@ export * from './LiveActionPanel';
 export * from './LiveGame';
 export * from './ReplayControls';
 export * from './ExportControls';
+export * from './SessionStats';

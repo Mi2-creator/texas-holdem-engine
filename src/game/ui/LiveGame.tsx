@@ -36,6 +36,12 @@ import {
   createInitialReplayState,
 } from './ReplayControls';
 import { ExportControls } from './ExportControls';
+import {
+  SessionStats,
+  SessionStatsData,
+  createInitialSessionStats,
+  updateSessionStats,
+} from './SessionStats';
 
 // ============================================================================
 // Display Helpers
@@ -451,6 +457,9 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [lastActions, setLastActions] = useState<Record<number, string>>({});
   const [thinkingPlayerIndex, setThinkingPlayerIndex] = useState<number | null>(null);
   const [replayState, setReplayState] = useState<ReplayState>(createInitialReplayState());
+  const [sessionStats, setSessionStats] = useState<SessionStatsData>(() =>
+    createInitialSessionStats(config?.startingStack ?? 1000)
+  );
 
   const controllerRef = useRef<GameController | null>(null);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
@@ -537,8 +546,19 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     try {
       const handResult = await controllerRef.current.playHand();
       setResult(handResult);
-      setGameState(controllerRef.current.getState());
+      const finalState = controllerRef.current.getState();
+      setGameState(finalState);
       setMessage('');
+
+      // Update session stats
+      const heroPlayer = finalState.players[heroIndex];
+      const heroWon = handResult.winnerNames.includes('You');
+      setSessionStats(prev => updateSessionStats(
+        prev,
+        heroWon,
+        heroPlayer.stack,
+        heroWon ? handResult.potSize : 0
+      ));
 
       // Rotate dealer for next hand
       controllerRef.current.rotateDealer();
@@ -606,6 +626,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setCountdown(null);
     setLastActions({});
     setHandCount(0);
+    setSessionStats(createInitialSessionStats(config?.startingStack ?? 1000));
   }, [config]);
 
   // Format action for display
@@ -699,24 +720,9 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
                   : `You've been eliminated`}
             </div>
 
-            {/* Final Stats */}
-            <div style={{
-              ...styles.welcomeSettings,
-              marginBottom: '24px',
-            }}>
-              <div style={styles.welcomeStat}>
-                <span style={styles.welcomeStatLabel}>Hands Played</span>
-                <span style={styles.welcomeStatValue}>{handCount}</span>
-              </div>
-              <div style={styles.welcomeStat}>
-                <span style={styles.welcomeStatLabel}>{isHeroWinner ? 'Final Stack' : 'Winner Stack'}</span>
-                <span style={{
-                  ...styles.welcomeStatValue,
-                  color: isHeroWinner ? '#22c55e' : '#ef4444',
-                }}>
-                  ${formatChips(winner?.stack ?? playersWithChips[0]?.stack ?? 0)}
-                </span>
-              </div>
+            {/* Full Session Stats */}
+            <div style={{ marginBottom: '24px' }}>
+              <SessionStats stats={sessionStats} />
             </div>
 
             <button
@@ -806,6 +812,11 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       {/* Header with Session Controls */}
       <div style={styles.header}>
         <span style={styles.title}>Texas Hold'em</span>
+
+        {/* Compact Session Stats - show after first hand */}
+        {sessionStats.handsPlayed > 0 && (
+          <SessionStats stats={sessionStats} compact />
+        )}
 
         <div style={styles.sessionControls}>
           {/* Hand Counter */}
