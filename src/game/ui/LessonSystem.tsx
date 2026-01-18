@@ -629,6 +629,126 @@ export function getCompletionPercent(progress: AllLessonProgress, lesson: Lesson
 }
 
 // ============================================================================
+// Progress Persistence (Phase L18)
+// ============================================================================
+
+/** localStorage key for lesson progress */
+const STORAGE_KEY = 'texas-holdem-lesson-progress';
+
+/** Storage version for forward compatibility */
+const STORAGE_VERSION = 1;
+
+/** Stored data format with version for migrations */
+interface StoredProgress {
+  version: number;
+  lessons: Record<LessonId, LessonProgressData>;
+}
+
+/**
+ * Validate that stored data matches expected structure.
+ * Returns true if data is valid, false otherwise.
+ */
+function isValidStoredProgress(data: unknown): data is StoredProgress {
+  if (!data || typeof data !== 'object') return false;
+
+  const obj = data as Record<string, unknown>;
+
+  // Check version exists and is a number
+  if (typeof obj.version !== 'number') return false;
+
+  // Check lessons object exists
+  if (!obj.lessons || typeof obj.lessons !== 'object') return false;
+
+  const lessons = obj.lessons as Record<string, unknown>;
+
+  // Validate each expected lesson exists with correct structure
+  for (const lessonId of LESSON_ORDER) {
+    const lesson = lessons[lessonId];
+    if (!lesson || typeof lesson !== 'object') return false;
+
+    const lessonData = lesson as Record<string, unknown>;
+
+    // Check required fields
+    if (typeof lessonData.lessonId !== 'string') return false;
+    if (typeof lessonData.handsPlayed !== 'number') return false;
+    if (typeof lessonData.correctDecisions !== 'number') return false;
+    if (!['locked', 'unlocked', 'completed'].includes(lessonData.status as string)) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Save lesson progress to localStorage.
+ * Silently fails if localStorage is unavailable.
+ */
+export function saveLessonProgress(progress: AllLessonProgress): void {
+  try {
+    const stored: StoredProgress = {
+      version: STORAGE_VERSION,
+      lessons: progress.lessons,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    // Silently fail - localStorage may be unavailable or full
+    console.warn('Failed to save lesson progress to localStorage');
+  }
+}
+
+/**
+ * Load lesson progress from localStorage.
+ * Returns initial progress if data is missing, corrupted, or invalid.
+ */
+export function loadLessonProgress(): AllLessonProgress {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      return createInitialProgress();
+    }
+
+    const parsed = JSON.parse(stored);
+
+    if (!isValidStoredProgress(parsed)) {
+      console.warn('Invalid lesson progress data in localStorage, resetting to initial state');
+      return createInitialProgress();
+    }
+
+    // Handle version migrations here if needed in the future
+    // Currently only version 1 exists
+
+    return { lessons: parsed.lessons };
+  } catch {
+    // JSON parse error or other issue
+    console.warn('Failed to load lesson progress from localStorage, using initial state');
+    return createInitialProgress();
+  }
+}
+
+/**
+ * Reset all lesson progress to initial state.
+ * Clears localStorage and returns fresh progress.
+ */
+export function resetLessonProgress(): AllLessonProgress {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Silently fail if localStorage unavailable
+  }
+  return createInitialProgress();
+}
+
+/**
+ * Check if there is saved progress in localStorage.
+ */
+export function hasSavedProgress(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
 // Styles
 // ============================================================================
 

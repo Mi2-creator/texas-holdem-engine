@@ -61,10 +61,12 @@ import {
   createLessonGameState,
   createLessonHandResult,
   AllLessonProgress,
-  createInitialProgress,
   updateLessonProgress,
   wasCorrectDecision,
   getLessonStatus,
+  loadLessonProgress,
+  saveLessonProgress,
+  resetLessonProgress,
 } from './LessonSystem';
 
 // ============================================================================
@@ -547,7 +549,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     createDefaultTrainingSettings()
   );
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
-  const [lessonProgress, setLessonProgress] = useState<AllLessonProgress>(createInitialProgress);
+  const [lessonProgress, setLessonProgress] = useState<AllLessonProgress>(loadLessonProgress);
   const [lessonHint, setLessonHint] = useState<LessonHint | null>(null);
   const [lessonFeedback, setLessonFeedback] = useState<LessonFeedback | null>(null);
   const [lastHeroAction, setLastHeroAction] = useState<PlayerAction | null>(null);
@@ -626,6 +628,11 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       setLessonHint(null);
     }
   }, [activeLesson, phase, gameState, heroIndex]);
+
+  // Persist lesson progress to localStorage whenever it changes
+  useEffect(() => {
+    saveLessonProgress(lessonProgress);
+  }, [lessonProgress]);
 
   // Start a new hand
   const startNewHand = useCallback(async () => {
