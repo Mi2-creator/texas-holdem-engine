@@ -30,11 +30,15 @@ function formatChips(amount: number): string {
 // Types
 // ============================================================================
 
+type RecommendedAction = 'fold' | 'call' | 'raise' | null;
+
 interface LiveActionPanelProps {
   readonly state: TableState;
   readonly heroIndex: number;
   readonly onAction: (action: PlayerAction) => void;
   readonly disabled?: boolean;
+  /** Action to highlight (for training mode) */
+  readonly recommendedAction?: RecommendedAction;
 }
 
 // ============================================================================
@@ -92,6 +96,28 @@ const styles = {
   disabledButton: {
     opacity: 0.4,
     cursor: 'not-allowed',
+  },
+
+  recommendedHighlight: {
+    boxShadow: '0 0 0 3px rgba(234, 179, 8, 0.6), 0 0 20px rgba(234, 179, 8, 0.4)',
+    transform: 'scale(1.05)',
+  },
+
+  recommendedBadge: {
+    position: 'absolute' as const,
+    top: '-8px',
+    right: '-8px',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#eab308',
+    color: '#000',
+    fontSize: '8px',
+    fontWeight: 700,
+    textTransform: 'uppercase' as const,
+  },
+
+  buttonWrapper: {
+    position: 'relative' as const,
   },
 
   betControls: {
@@ -174,6 +200,7 @@ export function LiveActionPanel({
   heroIndex,
   onAction,
   disabled = false,
+  recommendedAction = null,
 }: LiveActionPanelProps): React.ReactElement {
   const isHeroTurn = state.activePlayerIndex === heroIndex;
   const validActions = getValidActions(state);
@@ -267,61 +294,85 @@ export function LiveActionPanel({
   return (
     <div style={styles.container}>
       {/* Fold */}
-      <button
-        className="animate-button-press"
-        style={{ ...styles.button, ...styles.foldButton }}
-        onClick={handleFold}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.35)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
-        }}
-      >
-        Fold
-      </button>
+      <div style={styles.buttonWrapper}>
+        {recommendedAction === 'fold' && (
+          <span style={styles.recommendedBadge}>Suggested</span>
+        )}
+        <button
+          className="animate-button-press"
+          style={{
+            ...styles.button,
+            ...styles.foldButton,
+            ...(recommendedAction === 'fold' ? styles.recommendedHighlight : {}),
+          }}
+          onClick={handleFold}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.35)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+          }}
+        >
+          Fold
+        </button>
+      </div>
 
       {/* Check / Call */}
       {(validActions.canCheck || validActions.canCall) && (
-        <button
-          className="animate-button-press"
-          style={{ ...styles.button, ...styles.checkCallButton }}
-          onClick={handleCheckCall}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.35)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
-          }}
-        >
-          {validActions.canCheck ? 'Check' : `Call $${formatChips(validActions.callAmount)}`}
-        </button>
+        <div style={styles.buttonWrapper}>
+          {recommendedAction === 'call' && (
+            <span style={styles.recommendedBadge}>Suggested</span>
+          )}
+          <button
+            className="animate-button-press"
+            style={{
+              ...styles.button,
+              ...styles.checkCallButton,
+              ...(recommendedAction === 'call' ? styles.recommendedHighlight : {}),
+            }}
+            onClick={handleCheckCall}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.35)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+            }}
+          >
+            {validActions.canCheck ? 'Check' : `Call $${formatChips(validActions.callAmount)}`}
+          </button>
+        </div>
       )}
 
       {/* Bet / Raise */}
       {canBetOrRaise && (
         <div style={styles.betControlsWrapper}>
           <div style={styles.betControls}>
-            <button
-              className="animate-button-press"
-              style={{
-                ...styles.button,
-                ...styles.betRaiseButton,
-                ...(betAmount < minBetRaise || betAmount > maxBetRaise ? styles.disabledButton : {}),
-              }}
-              onClick={handleBetRaise}
-              disabled={betAmount < minBetRaise || betAmount > maxBetRaise}
-              onMouseEnter={(e) => {
-                if (betAmount >= minBetRaise && betAmount <= maxBetRaise) {
-                  e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.35)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
-              }}
-            >
-              {betLabel} ${formatChips(betAmount)}
-            </button>
+            <div style={styles.buttonWrapper}>
+              {recommendedAction === 'raise' && (
+                <span style={styles.recommendedBadge}>Suggested</span>
+              )}
+              <button
+                className="animate-button-press"
+                style={{
+                  ...styles.button,
+                  ...styles.betRaiseButton,
+                  ...(betAmount < minBetRaise || betAmount > maxBetRaise ? styles.disabledButton : {}),
+                  ...(recommendedAction === 'raise' ? styles.recommendedHighlight : {}),
+                }}
+                onClick={handleBetRaise}
+                disabled={betAmount < minBetRaise || betAmount > maxBetRaise}
+                onMouseEnter={(e) => {
+                  if (betAmount >= minBetRaise && betAmount <= maxBetRaise) {
+                    e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.35)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+                }}
+              >
+                {betLabel} ${formatChips(betAmount)}
+              </button>
+            </div>
 
             <input
               type="number"

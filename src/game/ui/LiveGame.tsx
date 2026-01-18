@@ -44,6 +44,13 @@ import {
 } from './SessionStats';
 import { PotOddsDisplay } from './PotOddsDisplay';
 import { DecisionHelper } from './DecisionHelper';
+import {
+  TrainingModeToggle,
+  TrainingModeSettings,
+  createDefaultTrainingSettings,
+  getRecommendedAction,
+  Recommendation,
+} from './TrainingMode';
 
 // ============================================================================
 // Display Helpers
@@ -230,6 +237,10 @@ const styles = {
     alignItems: 'stretch',
     flexWrap: 'wrap' as const,
     justifyContent: 'center',
+  },
+
+  trainingModeContainer: {
+    marginLeft: 'auto',
   },
 
   countdown: {
@@ -470,6 +481,9 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [sessionStats, setSessionStats] = useState<SessionStatsData>(() =>
     createInitialSessionStats(config?.startingStack ?? 1000)
   );
+  const [trainingSettings, setTrainingSettings] = useState<TrainingModeSettings>(
+    createDefaultTrainingSettings()
+  );
 
   const controllerRef = useRef<GameController | null>(null);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
@@ -491,6 +505,49 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       }
     };
   }, []);
+
+  // Auto-play in training mode
+  useEffect(() => {
+    if (
+      trainingSettings.enabled &&
+      trainingSettings.autoPlay &&
+      phase === 'waiting-for-action' &&
+      gameState &&
+      actionResolverRef.current
+    ) {
+      const recommendation = getRecommendedAction(
+        gameState.pot,
+        gameState.currentBet - gameState.players[heroIndex].currentBet,
+        gameState.players[heroIndex].holeCards,
+        gameState.communityCards,
+        gameState.street
+      );
+
+      // Auto-play after a delay to let user see the recommendation
+      const autoPlayDelay = 1500 * trainingSettings.speedMultiplier;
+      const timer = setTimeout(() => {
+        if (actionResolverRef.current) {
+          let action: PlayerAction;
+          if (recommendation === 'fold') {
+            action = { type: 'fold' };
+          } else if (recommendation === 'call') {
+            const callAmount = gameState.currentBet - gameState.players[heroIndex].currentBet;
+            action = callAmount > 0 ? { type: 'call' } : { type: 'check' };
+          } else {
+            // Raise - use a reasonable bet size (pot-sized)
+            const potBet = Math.min(gameState.pot, gameState.players[heroIndex].stack);
+            action = { type: 'bet', amount: Math.max(gameState.bigBlind, potBet) };
+          }
+          setPhase('playing');
+          setMessage('');
+          actionResolverRef.current(action);
+          actionResolverRef.current = null;
+        }
+      }, autoPlayDelay);
+
+      return () => clearTimeout(timer);
+    }
+  }, [trainingSettings, phase, gameState, heroIndex]);
 
   // Start a new hand
   const startNewHand = useCallback(async () => {
@@ -796,6 +853,14 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
               </div>
             </div>
 
+            {/* Training Mode Toggle on Welcome Screen */}
+            <div style={{ marginBottom: '24px' }}>
+              <TrainingModeToggle
+                settings={trainingSettings}
+                onSettingsChange={setTrainingSettings}
+              />
+            </div>
+
             <button
               className="animate-button-press"
               style={styles.startButton}
@@ -827,6 +892,14 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         {sessionStats.handsPlayed > 0 && (
           <SessionStats stats={sessionStats} compact />
         )}
+
+        {/* Training Mode Toggle */}
+        <div style={styles.trainingModeContainer}>
+          <TrainingModeToggle
+            settings={trainingSettings}
+            onSettingsChange={setTrainingSettings}
+          />
+        </div>
 
         <div style={styles.sessionControls}>
           {/* Hand Counter */}
@@ -894,6 +967,17 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         heroIndex={heroIndex}
         onAction={handleAction}
         disabled={phase !== 'waiting-for-action'}
+        recommendedAction={
+          trainingSettings.enabled && phase === 'waiting-for-action'
+            ? getRecommendedAction(
+                gameState.pot,
+                gameState.currentBet - gameState.players[heroIndex].currentBet,
+                gameState.players[heroIndex].holeCards,
+                gameState.communityCards,
+                gameState.street
+              )
+            : null
+        }
       />
 
       {/* Result Panel - Enhanced Round Summary */}
