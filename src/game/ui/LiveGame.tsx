@@ -43,6 +43,7 @@ import {
   updateSessionStats,
 } from './SessionStats';
 import { PotOddsDisplay } from './PotOddsDisplay';
+import { DecisionHelper } from './DecisionHelper';
 
 // ============================================================================
 // Display Helpers
@@ -221,6 +222,14 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '8px',
+  },
+
+  decisionHelperRow: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'stretch',
+    flexWrap: 'wrap' as const,
+    justifyContent: 'center',
   },
 
   countdown: {
@@ -859,15 +868,24 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         thinkingPlayerIndex={thinkingPlayerIndex}
       />
 
-      {/* Pot Odds & Hand Strength Display - Show during hero's turn */}
+      {/* Pot Odds, Hand Strength & Decision Helper - Show during hero's turn */}
       {phase === 'waiting-for-action' && (
-        <PotOddsDisplay
-          pot={gameState.pot}
-          callAmount={gameState.currentBet - gameState.players[heroIndex].currentBet}
-          holeCards={gameState.players[heroIndex].holeCards}
-          communityCards={gameState.communityCards}
-          street={gameState.street}
-        />
+        <div style={styles.decisionHelperRow}>
+          <PotOddsDisplay
+            pot={gameState.pot}
+            callAmount={gameState.currentBet - gameState.players[heroIndex].currentBet}
+            holeCards={gameState.players[heroIndex].holeCards}
+            communityCards={gameState.communityCards}
+            street={gameState.street}
+          />
+          <DecisionHelper
+            pot={gameState.pot}
+            callAmount={gameState.currentBet - gameState.players[heroIndex].currentBet}
+            holeCards={gameState.players[heroIndex].holeCards}
+            communityCards={gameState.communityCards}
+            street={gameState.street}
+          />
+        </div>
       )}
 
       {/* Action Panel */}
