@@ -1,7 +1,7 @@
 /**
- * Game UI - Phase L12
+ * Game UI - Phase L13
  *
- * Live game UI components with replay, export, and session stats.
+ * Live game UI components with replay, export, stats, and pot odds.
  */
 
 export * from './LiveTable';
@@ -11,3 +11,4 @@ export * from './LiveGame';
 export * from './ReplayControls';
 export * from './ExportControls';
 export * from './SessionStats';
+export * from './PotOddsDisplay';
