@@ -29,6 +29,12 @@ import {
 import { LiveTable } from './LiveTable';
 import { GameStatus } from './GameStatus';
 import { LiveActionPanel } from './LiveActionPanel';
+import {
+  ReplayControls,
+  ReplayState,
+  ReplaySpeed,
+  createInitialReplayState,
+} from './ReplayControls';
 
 // ============================================================================
 // Display Helpers
@@ -182,6 +188,24 @@ const styles = {
     color: '#22c55e',
     padding: '8px 0 4px 0',
     borderTop: '1px solid rgba(34, 197, 94, 0.3)',
+  },
+
+  // Replay highlight style
+  historyHighlight: {
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    borderLeft: '3px solid #6366f1',
+    paddingLeft: '8px',
+    marginLeft: '-8px',
+    borderRadius: '0 4px 4px 0',
+  },
+
+  // Dimmed events (after current in replay)
+  historyDimmed: {
+    opacity: 0.35,
+  },
+
+  replayControlsContainer: {
+    marginTop: '8px',
   },
 
   countdown: {
@@ -418,6 +442,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [lastActions, setLastActions] = useState<Record<number, string>>({});
   const [thinkingPlayerIndex, setThinkingPlayerIndex] = useState<number | null>(null);
+  const [replayState, setReplayState] = useState<ReplayState>(createInitialReplayState());
 
   const controllerRef = useRef<GameController | null>(null);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
@@ -457,6 +482,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setCountdown(null);
     setLastActions({});
     setThinkingPlayerIndex(null);
+    setReplayState(createInitialReplayState());
     setHandCount(prev => prev + 1);
 
     // Set up hero decision callback
@@ -567,7 +593,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setPhase('welcome');
     setResult(null);
     setMessage('');
-    setActionLog([]);
+    setHandHistory([]);
+    setReplayState(createInitialReplayState());
     setCountdown(null);
     setLastActions({});
     setHandCount(0);
@@ -585,6 +612,53 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       default: return action.type;
     }
   }
+
+  // ============================================================================
+  // Replay Controls
+  // ============================================================================
+
+  const handleStartReplay = useCallback(() => {
+    setReplayState({
+      isReplaying: true,
+      isPlaying: false,
+      currentIndex: -1,
+      speed: 'normal',
+    });
+  }, []);
+
+  const handleExitReplay = useCallback(() => {
+    setReplayState(createInitialReplayState());
+  }, []);
+
+  const handleReplayStepForward = useCallback(() => {
+    setReplayState(prev => {
+      if (prev.currentIndex >= handHistory.length - 1) return prev;
+      return { ...prev, currentIndex: prev.currentIndex + 1 };
+    });
+  }, [handHistory.length]);
+
+  const handleReplayStepBackward = useCallback(() => {
+    setReplayState(prev => {
+      if (prev.currentIndex <= -1) return prev;
+      return { ...prev, currentIndex: prev.currentIndex - 1 };
+    });
+  }, []);
+
+  const handleReplayPlay = useCallback(() => {
+    setReplayState(prev => ({ ...prev, isPlaying: true }));
+  }, []);
+
+  const handleReplayPause = useCallback(() => {
+    setReplayState(prev => ({ ...prev, isPlaying: false }));
+  }, []);
+
+  const handleReplayReset = useCallback(() => {
+    setReplayState(prev => ({ ...prev, currentIndex: -1, isPlaying: false }));
+  }, []);
+
+  const handleReplaySpeedChange = useCallback((speed: ReplaySpeed) => {
+    setReplayState(prev => ({ ...prev, speed }));
+  }, []);
 
   // Render game over state
   if (phase === 'game-over' && gameState) {
@@ -841,21 +915,52 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       {/* Hand History Log */}
       {handHistory.length > 0 && (
         <div style={styles.actionLog}>
-          <div style={styles.actionLogTitle}>Hand History</div>
+          <div style={styles.actionLogTitle}>
+            {replayState.isReplaying ? 'Replay Mode' : 'Hand History'}
+          </div>
           {handHistory.map((event, i) => {
             const styleType = getEventStyleType(event);
-            const eventStyle = styleType === 'header' ? styles.historyHeader
+            const baseStyle = styleType === 'header' ? styles.historyHeader
               : styleType === 'info' ? styles.historyInfo
               : styleType === 'action' ? styles.historyAction
               : styleType === 'cards' ? styles.historyCards
               : styleType === 'result' ? styles.historyResult
               : styles.actionLogEntry;
+
+            // Apply replay highlighting
+            const isCurrentReplayEvent = replayState.isReplaying && i === replayState.currentIndex;
+            const isAfterCurrentEvent = replayState.isReplaying && i > replayState.currentIndex;
+
+            const eventStyle = {
+              ...baseStyle,
+              ...(isCurrentReplayEvent ? styles.historyHighlight : {}),
+              ...(isAfterCurrentEvent ? styles.historyDimmed : {}),
+            };
+
             return (
               <div key={i} style={eventStyle}>
                 {formatHistoryEvent(event)}
               </div>
             );
           })}
+
+          {/* Replay Controls - Only show after hand is complete */}
+          {phase === 'complete' && (
+            <div style={styles.replayControlsContainer}>
+              <ReplayControls
+                totalEvents={handHistory.length}
+                replayState={replayState}
+                onStepBackward={handleReplayStepBackward}
+                onStepForward={handleReplayStepForward}
+                onPlay={handleReplayPlay}
+                onPause={handleReplayPause}
+                onReset={handleReplayReset}
+                onSpeedChange={handleReplaySpeedChange}
+                onStartReplay={handleStartReplay}
+                onExitReplay={handleExitReplay}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
