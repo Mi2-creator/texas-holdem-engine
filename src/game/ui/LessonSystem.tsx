@@ -1,6 +1,6 @@
 /**
  * LessonSystem.tsx
- * Phase L16 - Training Curriculum / Lesson System
+ * Phase L16 + L17 - Training Curriculum / Lesson System with Progress
  *
  * Provides structured lessons for beginners:
  * - Each lesson has a clear concept
@@ -8,8 +8,13 @@
  * - Contextual hints during play
  * - Feedback summary after each hand
  *
+ * Phase L17 additions:
+ * - Lesson states: locked / unlocked / completed
+ * - Completion criteria per lesson
+ * - Progress tracking with unlock system
+ *
  * Reuses Training Mode, Decision Helper, and Session Stats.
- * UI-only, no engine changes.
+ * UI-only, no engine changes. State in-memory only.
  */
 
 import React, { useMemo } from 'react';
@@ -25,6 +30,32 @@ export type LessonId = 'starting-hands' | 'pot-odds' | 'folding-discipline';
 
 export type AllowedAction = 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all-in';
 
+/** Lesson unlock status */
+export type LessonStatus = 'locked' | 'unlocked' | 'completed';
+
+/** Completion criteria for a lesson - deterministic and lightweight */
+export interface CompletionCriteria {
+  /** Minimum hands to play in this lesson */
+  readonly handsRequired: number;
+  /** Minimum correct decisions to complete */
+  readonly correctDecisionsRequired: number;
+  /** Description shown to user */
+  readonly description: string;
+}
+
+/** Tracks progress toward completing a specific lesson */
+export interface LessonProgressData {
+  readonly lessonId: LessonId;
+  readonly handsPlayed: number;
+  readonly correctDecisions: number;
+  readonly status: LessonStatus;
+}
+
+/** Full progress state for all lessons */
+export interface AllLessonProgress {
+  readonly lessons: Record<LessonId, LessonProgressData>;
+}
+
 export interface Lesson {
   readonly id: LessonId;
   readonly number: number;
@@ -33,6 +64,7 @@ export interface Lesson {
   readonly description: string;
   readonly objectives: readonly string[];
   readonly allowedActions: readonly AllowedAction[];
+  readonly completionCriteria: CompletionCriteria;
   readonly getHint: (state: LessonGameState) => LessonHint | null;
   readonly getFeedback: (result: LessonHandResult) => LessonFeedback;
 }
@@ -128,6 +160,11 @@ const LESSON_1_STARTING_HANDS: Lesson = {
     'Be patient and wait for good spots',
   ],
   allowedActions: ['fold', 'call', 'check'],
+  completionCriteria: {
+    handsRequired: 5,
+    correctDecisionsRequired: 3,
+    description: 'Play 5 hands and make 3 correct decisions',
+  },
 
   getHint: (state: LessonGameState): LessonHint | null => {
     if (state.street !== 'preflop') return null;
@@ -243,6 +280,11 @@ const LESSON_2_POT_ODDS: Lesson = {
     'Understand the relationship between pot size and call amount',
   ],
   allowedActions: ['fold', 'call', 'check'],
+  completionCriteria: {
+    handsRequired: 5,
+    correctDecisionsRequired: 3,
+    description: 'Play 5 hands and make 3 pot odds based decisions',
+  },
 
   getHint: (state: LessonGameState): LessonHint | null => {
     if (state.callAmount === 0) {
@@ -334,6 +376,11 @@ const LESSON_3_FOLDING_DISCIPLINE: Lesson = {
     'Recognize when you\'re beaten',
   ],
   allowedActions: ['fold', 'call', 'check'],
+  completionCriteria: {
+    handsRequired: 5,
+    correctDecisionsRequired: 3,
+    description: 'Play 5 hands and make 3 disciplined decisions',
+  },
 
   getHint: (state: LessonGameState): LessonHint | null => {
     const isFacingBet = state.callAmount > 0;
@@ -457,6 +504,131 @@ export function createInitialLessonState(): LessonState {
 }
 
 // ============================================================================
+// Progress Tracking (Phase L17)
+// ============================================================================
+
+/** Get ordered list of lesson IDs */
+export const LESSON_ORDER: readonly LessonId[] = ['starting-hands', 'pot-odds', 'folding-discipline'];
+
+/** Create initial progress state - first lesson unlocked, rest locked */
+export function createInitialProgress(): AllLessonProgress {
+  return {
+    lessons: {
+      'starting-hands': {
+        lessonId: 'starting-hands',
+        handsPlayed: 0,
+        correctDecisions: 0,
+        status: 'unlocked', // First lesson starts unlocked
+      },
+      'pot-odds': {
+        lessonId: 'pot-odds',
+        handsPlayed: 0,
+        correctDecisions: 0,
+        status: 'locked',
+      },
+      'folding-discipline': {
+        lessonId: 'folding-discipline',
+        handsPlayed: 0,
+        correctDecisions: 0,
+        status: 'locked',
+      },
+    },
+  };
+}
+
+/** Get the status of a specific lesson */
+export function getLessonStatus(progress: AllLessonProgress, lessonId: LessonId): LessonStatus {
+  return progress.lessons[lessonId].status;
+}
+
+/** Get progress data for a specific lesson */
+export function getLessonProgress(progress: AllLessonProgress, lessonId: LessonId): LessonProgressData {
+  return progress.lessons[lessonId];
+}
+
+/** Check if a lesson meets its completion criteria */
+export function isLessonComplete(progress: AllLessonProgress, lesson: Lesson): boolean {
+  const data = progress.lessons[lesson.id];
+  return (
+    data.handsPlayed >= lesson.completionCriteria.handsRequired &&
+    data.correctDecisions >= lesson.completionCriteria.correctDecisionsRequired
+  );
+}
+
+/** Get the next lesson ID in sequence (or null if no more) */
+export function getNextLessonId(currentId: LessonId): LessonId | null {
+  const currentIndex = LESSON_ORDER.indexOf(currentId);
+  if (currentIndex === -1 || currentIndex >= LESSON_ORDER.length - 1) {
+    return null;
+  }
+  return LESSON_ORDER[currentIndex + 1];
+}
+
+/** Update progress after a hand is completed */
+export function updateLessonProgress(
+  progress: AllLessonProgress,
+  lessonId: LessonId,
+  wasCorrectDecision: boolean
+): AllLessonProgress {
+  const currentData = progress.lessons[lessonId];
+  const lesson = getLessonById(lessonId);
+
+  if (!lesson || currentData.status === 'completed') {
+    return progress; // No update if already completed or lesson not found
+  }
+
+  const newData: LessonProgressData = {
+    ...currentData,
+    handsPlayed: currentData.handsPlayed + 1,
+    correctDecisions: currentData.correctDecisions + (wasCorrectDecision ? 1 : 0),
+  };
+
+  // Check if lesson is now complete
+  const meetsHands = newData.handsPlayed >= lesson.completionCriteria.handsRequired;
+  const meetsDecisions = newData.correctDecisions >= lesson.completionCriteria.correctDecisionsRequired;
+
+  let updatedLessons = {
+    ...progress.lessons,
+    [lessonId]: meetsHands && meetsDecisions
+      ? { ...newData, status: 'completed' as LessonStatus }
+      : newData,
+  };
+
+  // If just completed, unlock the next lesson
+  if (meetsHands && meetsDecisions && currentData.status !== 'completed') {
+    const nextId = getNextLessonId(lessonId);
+    if (nextId && updatedLessons[nextId].status === 'locked') {
+      updatedLessons = {
+        ...updatedLessons,
+        [nextId]: {
+          ...updatedLessons[nextId],
+          status: 'unlocked' as LessonStatus,
+        },
+      };
+    }
+  }
+
+  return { lessons: updatedLessons };
+}
+
+/** Check if a decision was correct based on the feedback grade */
+export function wasCorrectDecision(feedback: LessonFeedback): boolean {
+  return feedback.grade === 'excellent' || feedback.grade === 'good';
+}
+
+/** Get completion percentage for a lesson */
+export function getCompletionPercent(progress: AllLessonProgress, lesson: Lesson): number {
+  const data = progress.lessons[lesson.id];
+  const criteria = lesson.completionCriteria;
+
+  const handsPercent = Math.min(100, (data.handsPlayed / criteria.handsRequired) * 100);
+  const decisionsPercent = Math.min(100, (data.correctDecisions / criteria.correctDecisionsRequired) * 100);
+
+  // Average of both criteria
+  return Math.floor((handsPercent + decisionsPercent) / 2);
+}
+
+// ============================================================================
 // Styles
 // ============================================================================
 
@@ -493,6 +665,51 @@ const styles = {
   lessonCardActive: {
     border: '1px solid rgba(34, 197, 94, 0.5)',
     backgroundColor: 'rgba(34, 197, 94, 0.1)',
+  },
+
+  lessonCardLocked: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+
+  lessonCardCompleted: {
+    border: '1px solid rgba(168, 85, 247, 0.4)',
+    backgroundColor: 'rgba(168, 85, 247, 0.05)',
+  },
+
+  lessonStatusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 8px',
+    borderRadius: '10px',
+    fontSize: '9px',
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+
+  lessonProgressBar: {
+    height: '4px',
+    borderRadius: '2px',
+    backgroundColor: 'rgba(75, 85, 99, 0.3)',
+    marginTop: '8px',
+    overflow: 'hidden',
+  },
+
+  lessonProgressFill: {
+    height: '100%',
+    borderRadius: '2px',
+    backgroundColor: '#22c55e',
+    transition: 'width 0.3s ease',
+  },
+
+  lessonProgressText: {
+    fontSize: '10px',
+    color: 'rgba(156, 163, 175, 0.7)',
+    marginTop: '4px',
+    display: 'flex',
+    justifyContent: 'space-between',
   },
 
   lessonNumber: {
@@ -681,21 +898,45 @@ function getFeedbackColors(grade: LessonFeedback['grade']): { bg: string; border
 
 interface LessonSelectorProps {
   readonly activeLesson: Lesson | null;
+  readonly progress: AllLessonProgress;
   readonly onSelectLesson: (lesson: Lesson) => void;
   readonly onClearLesson: () => void;
 }
 
+/** Get status badge styles based on lesson status */
+function getStatusBadgeStyles(status: LessonStatus): { bg: string; color: string; icon: string } {
+  switch (status) {
+    case 'completed':
+      return { bg: 'rgba(168, 85, 247, 0.2)', color: '#a855f7', icon: '✓' };
+    case 'locked':
+      return { bg: 'rgba(75, 85, 99, 0.2)', color: '#6b7280', icon: '🔒' };
+    default: // unlocked
+      return { bg: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', icon: '▶' };
+  }
+}
+
 export function LessonSelector({
   activeLesson,
+  progress,
   onSelectLesson,
   onClearLesson,
 }: LessonSelectorProps): React.ReactElement {
   if (activeLesson) {
+    const activeProgress = getLessonProgress(progress, activeLesson.id);
+    const percent = getCompletionPercent(progress, activeLesson);
+
     return (
       <div style={styles.activeLessonBar}>
         <div style={styles.activeLessonInfo}>
           <span style={styles.activeLessonLabel}>Lesson {activeLesson.number}</span>
           <span style={styles.activeLessonTitle}>{activeLesson.title}</span>
+          <span style={{
+            ...styles.lessonStatusBadge,
+            backgroundColor: 'rgba(234, 179, 8, 0.2)',
+            color: '#eab308',
+          }}>
+            {activeProgress.handsPlayed}/{activeLesson.completionCriteria.handsRequired} hands
+          </span>
         </div>
         <button
           style={styles.exitLessonButton}
@@ -719,33 +960,130 @@ export function LessonSelector({
         <span>📚</span>
         <span>Training Lessons</span>
       </div>
-      {LESSONS.map((lesson) => (
-        <div
-          key={lesson.id}
-          style={styles.lessonCard}
-          onClick={() => onSelectLesson(lesson)}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.1)';
-            e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(30, 30, 40, 0.6)';
-            e.currentTarget.style.borderColor = 'rgba(75, 85, 99, 0.3)';
-          }}
-        >
-          <div style={styles.lessonNumber}>Lesson {lesson.number}</div>
-          <div style={styles.lessonTitle}>{lesson.title}</div>
-          <div style={styles.lessonConcept}>{lesson.concept}</div>
-          <ul style={styles.objectivesList}>
-            {lesson.objectives.slice(0, 2).map((obj, i) => (
-              <li key={i} style={styles.objectiveItem}>
-                <span style={{ color: '#22c55e' }}>•</span>
-                {obj}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      {LESSONS.map((lesson) => {
+        const lessonProgress = getLessonProgress(progress, lesson.id);
+        const status = lessonProgress.status;
+        const isLocked = status === 'locked';
+        const isCompleted = status === 'completed';
+        const percent = getCompletionPercent(progress, lesson);
+        const badgeStyles = getStatusBadgeStyles(status);
+
+        const cardStyle = {
+          ...styles.lessonCard,
+          ...(isLocked ? styles.lessonCardLocked : {}),
+          ...(isCompleted ? styles.lessonCardCompleted : {}),
+        };
+
+        const handleClick = () => {
+          if (!isLocked) {
+            onSelectLesson(lesson);
+          }
+        };
+
+        const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+          if (!isLocked) {
+            if (isCompleted) {
+              e.currentTarget.style.backgroundColor = 'rgba(168, 85, 247, 0.15)';
+              e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.5)';
+            } else {
+              e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.1)';
+              e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+            }
+          }
+        };
+
+        const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+          if (!isLocked) {
+            if (isCompleted) {
+              e.currentTarget.style.backgroundColor = 'rgba(168, 85, 247, 0.05)';
+              e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+            } else {
+              e.currentTarget.style.backgroundColor = 'rgba(30, 30, 40, 0.6)';
+              e.currentTarget.style.borderColor = 'rgba(75, 85, 99, 0.3)';
+            }
+          }
+        };
+
+        return (
+          <div
+            key={lesson.id}
+            style={cardStyle}
+            onClick={handleClick}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={styles.lessonNumber}>Lesson {lesson.number}</div>
+              <span style={{
+                ...styles.lessonStatusBadge,
+                backgroundColor: badgeStyles.bg,
+                color: badgeStyles.color,
+              }}>
+                {badgeStyles.icon} {status}
+              </span>
+            </div>
+            <div style={{
+              ...styles.lessonTitle,
+              color: isLocked ? 'rgba(156, 163, 175, 0.5)' : isCompleted ? '#a855f7' : '#fff',
+            }}>
+              {lesson.title}
+            </div>
+            <div style={styles.lessonConcept}>{lesson.concept}</div>
+
+            {/* Progress bar for unlocked lessons */}
+            {!isLocked && !isCompleted && (
+              <>
+                <div style={styles.lessonProgressBar}>
+                  <div style={{
+                    ...styles.lessonProgressFill,
+                    width: `${percent}%`,
+                  }} />
+                </div>
+                <div style={styles.lessonProgressText}>
+                  <span>{lessonProgress.correctDecisions}/{lesson.completionCriteria.correctDecisionsRequired} correct</span>
+                  <span>{percent}%</span>
+                </div>
+              </>
+            )}
+
+            {/* Completion info for completed lessons */}
+            {isCompleted && (
+              <div style={{
+                ...styles.lessonProgressText,
+                color: '#a855f7',
+                marginTop: '8px',
+              }}>
+                <span>✓ Completed</span>
+                <span>{lessonProgress.correctDecisions} correct decisions</span>
+              </div>
+            )}
+
+            {/* Objectives for locked lessons */}
+            {isLocked && (
+              <ul style={styles.objectivesList}>
+                {lesson.objectives.slice(0, 2).map((obj, i) => (
+                  <li key={i} style={styles.objectiveItem}>
+                    <span style={{ color: '#6b7280' }}>•</span>
+                    {obj}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Objectives for unlocked (not completed) lessons */}
+            {!isLocked && !isCompleted && (
+              <ul style={styles.objectivesList}>
+                {lesson.objectives.slice(0, 2).map((obj, i) => (
+                  <li key={i} style={styles.objectiveItem}>
+                    <span style={{ color: '#22c55e' }}>•</span>
+                    {obj}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

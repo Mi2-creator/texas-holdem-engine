@@ -60,6 +60,11 @@ import {
   LessonFeedbackDisplay,
   createLessonGameState,
   createLessonHandResult,
+  AllLessonProgress,
+  createInitialProgress,
+  updateLessonProgress,
+  wasCorrectDecision,
+  getLessonStatus,
 } from './LessonSystem';
 
 // ============================================================================
@@ -542,6 +547,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     createDefaultTrainingSettings()
   );
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [lessonProgress, setLessonProgress] = useState<AllLessonProgress>(createInitialProgress);
   const [lessonHint, setLessonHint] = useState<LessonHint | null>(null);
   const [lessonFeedback, setLessonFeedback] = useState<LessonFeedback | null>(null);
   const [lastHeroAction, setLastHeroAction] = useState<PlayerAction | null>(null);
@@ -701,13 +707,17 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         heroWon ? handResult.potSize : 0
       ));
 
-      // Generate lesson feedback if in a lesson
+      // Generate lesson feedback and update progress if in a lesson
       if (activeLesson && lastHeroAction) {
         const lessonGameState = createLessonGameState(finalState, heroIndex);
         const heroFolded = lastHeroAction.type === 'fold';
         const lessonResult = createLessonHandResult(heroWon, heroFolded, lastHeroAction, lessonGameState);
         const feedback = activeLesson.getFeedback(lessonResult);
         setLessonFeedback(feedback);
+
+        // Update lesson progress
+        const isCorrect = wasCorrectDecision(feedback);
+        setLessonProgress(prev => updateLessonProgress(prev, activeLesson.id, isCorrect));
       }
 
       // Rotate dealer for next hand
@@ -779,6 +789,11 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setLastActions({});
     setHandCount(0);
     setSessionStats(createInitialSessionStats(config?.startingStack ?? 1000));
+    // Reset lesson state but preserve progress (progress persists in-memory across games)
+    setActiveLesson(null);
+    setLessonHint(null);
+    setLessonFeedback(null);
+    setLastHeroAction(null);
   }, [config]);
 
   // Format action for display
@@ -950,7 +965,14 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
             <div style={{ marginBottom: '24px' }}>
               <LessonSelector
                 activeLesson={activeLesson}
-                onSelectLesson={setActiveLesson}
+                progress={lessonProgress}
+                onSelectLesson={(lesson) => {
+                  // Only allow selecting unlocked or completed lessons
+                  const status = getLessonStatus(lessonProgress, lesson.id);
+                  if (status !== 'locked') {
+                    setActiveLesson(lesson);
+                  }
+                }}
                 onClearLesson={() => setActiveLesson(null)}
               />
             </div>
