@@ -51,6 +51,16 @@ import {
   getRecommendedAction,
   Recommendation,
 } from './TrainingMode';
+import {
+  Lesson,
+  LessonHint,
+  LessonFeedback,
+  LessonSelector,
+  LessonHintDisplay,
+  LessonFeedbackDisplay,
+  createLessonGameState,
+  createLessonHandResult,
+} from './LessonSystem';
 
 // ============================================================================
 // Display Helpers
@@ -375,6 +385,53 @@ const styles = {
     border: '1px solid rgba(75, 85, 99, 0.3)',
   },
 
+  // Active Lesson Bar
+  lessonBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px 20px',
+    borderRadius: '10px',
+    backgroundColor: 'rgba(234, 179, 8, 0.1)',
+    border: '1px solid rgba(234, 179, 8, 0.3)',
+    width: '100%',
+    maxWidth: '700px',
+  },
+
+  lessonBarIcon: {
+    fontSize: '18px',
+  },
+
+  lessonBarContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '2px',
+  },
+
+  lessonBarTitle: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#eab308',
+  },
+
+  lessonBarConcept: {
+    fontSize: '11px',
+    color: 'rgba(234, 179, 8, 0.7)',
+  },
+
+  lessonBarExitButton: {
+    padding: '4px 10px',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(75, 85, 99, 0.2)',
+    color: '#9ca3af',
+    fontSize: '10px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    border: '1px solid rgba(75, 85, 99, 0.3)',
+    transition: 'all 0.15s ease',
+  },
+
   // Enhanced Result Panel
   resultPanelEnhanced: {
     padding: '28px 40px',
@@ -484,6 +541,10 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [trainingSettings, setTrainingSettings] = useState<TrainingModeSettings>(
     createDefaultTrainingSettings()
   );
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [lessonHint, setLessonHint] = useState<LessonHint | null>(null);
+  const [lessonFeedback, setLessonFeedback] = useState<LessonFeedback | null>(null);
+  const [lastHeroAction, setLastHeroAction] = useState<PlayerAction | null>(null);
 
   const controllerRef = useRef<GameController | null>(null);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
@@ -549,6 +610,17 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     }
   }, [trainingSettings, phase, gameState, heroIndex]);
 
+  // Update lesson hints during hero's turn
+  useEffect(() => {
+    if (activeLesson && phase === 'waiting-for-action' && gameState) {
+      const lessonGameState = createLessonGameState(gameState, heroIndex);
+      const hint = activeLesson.getHint(lessonGameState);
+      setLessonHint(hint);
+    } else {
+      setLessonHint(null);
+    }
+  }, [activeLesson, phase, gameState, heroIndex]);
+
   // Start a new hand
   const startNewHand = useCallback(async () => {
     if (!controllerRef.current) return;
@@ -567,6 +639,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setLastActions({});
     setThinkingPlayerIndex(null);
     setReplayState(createInitialReplayState());
+    setLessonFeedback(null);
+    setLastHeroAction(null);
     setHandCount(prev => prev + 1);
 
     // Set up hero decision callback
@@ -627,6 +701,15 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         heroWon ? handResult.potSize : 0
       ));
 
+      // Generate lesson feedback if in a lesson
+      if (activeLesson && lastHeroAction) {
+        const lessonGameState = createLessonGameState(finalState, heroIndex);
+        const heroFolded = lastHeroAction.type === 'fold';
+        const lessonResult = createLessonHandResult(heroWon, heroFolded, lastHeroAction, lessonGameState);
+        const feedback = activeLesson.getFeedback(lessonResult);
+        setLessonFeedback(feedback);
+      }
+
       // Rotate dealer for next hand
       controllerRef.current.rotateDealer();
 
@@ -671,6 +754,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     if (actionResolverRef.current) {
       setPhase('playing');
       setMessage('');
+      setLastHeroAction(action);
+      setLessonHint(null);
       actionResolverRef.current(action);
       actionResolverRef.current = null;
     }
@@ -861,6 +946,15 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
               />
             </div>
 
+            {/* Lesson Selector on Welcome Screen */}
+            <div style={{ marginBottom: '24px' }}>
+              <LessonSelector
+                activeLesson={activeLesson}
+                onSelectLesson={setActiveLesson}
+                onClearLesson={() => setActiveLesson(null)}
+              />
+            </div>
+
             <button
               className="animate-button-press"
               style={styles.startButton}
@@ -925,6 +1019,31 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         </div>
       </div>
 
+      {/* Active Lesson Bar */}
+      {activeLesson && (
+        <div style={styles.lessonBar}>
+          <span style={styles.lessonBarIcon}>📚</span>
+          <div style={styles.lessonBarContent}>
+            <span style={styles.lessonBarTitle}>
+              Lesson {activeLesson.number}: {activeLesson.title}
+            </span>
+            <span style={styles.lessonBarConcept}>{activeLesson.concept}</span>
+          </div>
+          <button
+            style={styles.lessonBarExitButton}
+            onClick={() => setActiveLesson(null)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(75, 85, 99, 0.2)';
+            }}
+          >
+            Exit Lesson
+          </button>
+        </div>
+      )}
+
       {/* Game Status */}
       <GameStatus
         state={gameState}
@@ -958,6 +1077,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
             communityCards={gameState.communityCards}
             street={gameState.street}
           />
+          {/* Lesson Hint - Show contextual advice during lessons */}
+          {lessonHint && <LessonHintDisplay hint={lessonHint} />}
         </div>
       )}
 
@@ -1025,6 +1146,9 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
               </div>
             ))}
           </div>
+
+          {/* Lesson Feedback - Show after hand in lesson mode */}
+          {lessonFeedback && <LessonFeedbackDisplay feedback={lessonFeedback} />}
 
           {/* Actions */}
           <div style={styles.resultActions}>
