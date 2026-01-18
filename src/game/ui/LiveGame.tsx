@@ -20,6 +20,12 @@ import {
   HandResult,
   createGameController,
 } from '../controller/GameController';
+import {
+  HandHistoryEvent,
+  formatHistoryEvent,
+  getEventStyleType,
+  EventStyleType,
+} from '../controller/HandHistory';
 import { LiveTable } from './LiveTable';
 import { GameStatus } from './GameStatus';
 import { LiveActionPanel } from './LiveActionPanel';
@@ -137,6 +143,45 @@ const styles = {
     color: 'rgba(156, 163, 175, 0.9)',
     padding: '4px 0',
     borderBottom: '1px solid rgba(75, 85, 99, 0.2)',
+  },
+
+  // Event type styles for hand history
+  historyHeader: {
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#a855f7',
+    padding: '8px 0 4px 0',
+    borderBottom: '1px solid rgba(168, 85, 247, 0.3)',
+  },
+
+  historyInfo: {
+    fontSize: '11px',
+    color: 'rgba(156, 163, 175, 0.7)',
+    padding: '2px 0',
+    fontStyle: 'italic' as const,
+  },
+
+  historyAction: {
+    fontSize: '12px',
+    color: 'rgba(156, 163, 175, 0.9)',
+    padding: '3px 0',
+    borderBottom: '1px solid rgba(75, 85, 99, 0.15)',
+  },
+
+  historyCards: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#60a5fa',
+    padding: '6px 0',
+    borderBottom: '1px solid rgba(96, 165, 250, 0.2)',
+  },
+
+  historyResult: {
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#22c55e',
+    padding: '8px 0 4px 0',
+    borderTop: '1px solid rgba(34, 197, 94, 0.3)',
   },
 
   countdown: {
@@ -369,9 +414,10 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [handCount, setHandCount] = useState<number>(0);
   const [result, setResult] = useState<HandResult | null>(null);
   const [message, setMessage] = useState<string>('');
-  const [actionLog, setActionLog] = useState<string[]>([]);
+  const [handHistory, setHandHistory] = useState<HandHistoryEvent[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [lastActions, setLastActions] = useState<Record<number, string>>({});
+  const [thinkingPlayerIndex, setThinkingPlayerIndex] = useState<number | null>(null);
 
   const controllerRef = useRef<GameController | null>(null);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
@@ -407,9 +453,10 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setPhase('playing');
     setResult(null);
     setMessage('Dealing cards...');
-    setActionLog([]);
+    setHandHistory([]);
     setCountdown(null);
     setLastActions({});
+    setThinkingPlayerIndex(null);
     setHandCount(prev => prev + 1);
 
     // Set up hero decision callback
@@ -428,14 +475,28 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       });
     });
 
-    // Set up action logging callback
+    // Set up action callback for visual feedback (last actions display)
     controllerRef.current.setActionCallback((event) => {
       const actionStr = formatAction(event.action);
-      const logEntry = `${event.street.toUpperCase()}: ${event.playerName} ${actionStr} (Pot: $${event.potAfter})`;
-      setActionLog(prev => [...prev, logEntry]);
       // Track last action per player for visual feedback
       setLastActions(prev => ({ ...prev, [event.playerIndex]: actionStr }));
       setGameState(controllerRef.current!.getState());
+    });
+
+    // Set up history callback for action log
+    controllerRef.current.setHistoryCallback((event) => {
+      setHandHistory(prev => [...prev, event]);
+    });
+
+    // Set up thinking callback for AI deliberation
+    controllerRef.current.setThinkingCallback((playerIndex, isThinking) => {
+      if (isThinking) {
+        setThinkingPlayerIndex(playerIndex);
+        // Update game state to show current position
+        setGameState(controllerRef.current!.getState());
+      } else {
+        setThinkingPlayerIndex(null);
+      }
     });
 
     // Play the hand
@@ -479,7 +540,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
 
     } catch (error) {
       console.error('Error playing hand:', error);
-      setPhase('idle');
+      setPhase('welcome');
       setMessage('Error occurred');
     }
   }, []);
@@ -527,8 +588,13 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
 
   // Render game over state
   if (phase === 'game-over' && gameState) {
-    const winner = gameState.players.find(p => p.stack > 0);
-    const isHeroWinner = winner?.id === 'hero';
+    // Find players still in the game (with chips)
+    const playersWithChips = gameState.players.filter(p => p.stack > 0);
+    const heroPlayer = gameState.players.find(p => p.id === 'hero');
+    const isHeroStillIn = heroPlayer && heroPlayer.stack > 0;
+    // Hero wins if they're the only one left OR if game ended and hero has chips
+    const isHeroWinner = playersWithChips.length === 1 && playersWithChips[0].id === 'hero';
+    const winner = playersWithChips.length === 1 ? playersWithChips[0] : null;
 
     return (
       <div style={styles.container}>
@@ -546,7 +612,9 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
             <div style={styles.gameOverInfo}>
               {isHeroWinner
                 ? `You've won the match!`
-                : `${winner?.name} wins the match`}
+                : winner
+                  ? `${winner.name} wins the match`
+                  : `You've been eliminated`}
             </div>
 
             {/* Final Stats */}
@@ -559,12 +627,12 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
                 <span style={styles.welcomeStatValue}>{handCount}</span>
               </div>
               <div style={styles.welcomeStat}>
-                <span style={styles.welcomeStatLabel}>Final Stack</span>
+                <span style={styles.welcomeStatLabel}>{isHeroWinner ? 'Final Stack' : 'Winner Stack'}</span>
                 <span style={{
                   ...styles.welcomeStatValue,
                   color: isHeroWinner ? '#22c55e' : '#ef4444',
                 }}>
-                  ${formatChips(winner?.stack ?? 0)}
+                  ${formatChips(winner?.stack ?? playersWithChips[0]?.stack ?? 0)}
                 </span>
               </div>
             </div>
@@ -611,7 +679,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         <div style={styles.welcomeOverlay}>
           <div style={styles.welcomeCard}>
             <div style={styles.welcomeTitle}>Texas Hold'em</div>
-            <div style={styles.welcomeSubtitle}>Heads-Up No-Limit</div>
+            <div style={styles.welcomeSubtitle}>No-Limit Texas Hold'em</div>
 
             <div style={styles.welcomeSettings}>
               <div style={styles.welcomeStat}>
@@ -626,7 +694,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
               </div>
               <div style={styles.welcomeStat}>
                 <span style={styles.welcomeStatLabel}>Players</span>
-                <span style={styles.welcomeStatValue}>2</span>
+                <span style={styles.welcomeStatValue}>3</span>
               </div>
             </div>
 
@@ -694,6 +762,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         heroIndex={heroIndex}
         showOpponentCards={phase === 'complete' && result !== null && !result.endedByFold}
         lastActions={lastActions}
+        thinkingPlayerIndex={thinkingPlayerIndex}
       />
 
       {/* Action Panel */}
@@ -769,13 +838,24 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
         </div>
       )}
 
-      {/* Action Log */}
-      {actionLog.length > 0 && (
+      {/* Hand History Log */}
+      {handHistory.length > 0 && (
         <div style={styles.actionLog}>
-          <div style={styles.actionLogTitle}>Action Log</div>
-          {actionLog.map((entry, i) => (
-            <div key={i} style={styles.actionLogEntry}>{entry}</div>
-          ))}
+          <div style={styles.actionLogTitle}>Hand History</div>
+          {handHistory.map((event, i) => {
+            const styleType = getEventStyleType(event);
+            const eventStyle = styleType === 'header' ? styles.historyHeader
+              : styleType === 'info' ? styles.historyInfo
+              : styleType === 'action' ? styles.historyAction
+              : styleType === 'cards' ? styles.historyCards
+              : styleType === 'result' ? styles.historyResult
+              : styles.actionLogEntry;
+            return (
+              <div key={i} style={eventStyle}>
+                {formatHistoryEvent(event)}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

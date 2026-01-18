@@ -163,6 +163,19 @@ export function getBigBlindIndex(state: TableState): number {
 }
 
 /**
+ * Get position label for a player
+ * Returns BTN, SB, BB, or empty string for other positions
+ */
+export type PositionLabel = 'BTN' | 'SB' | 'BB' | '';
+
+export function getPositionLabel(state: TableState, playerIndex: number): PositionLabel {
+  if (playerIndex === state.dealerIndex) return 'BTN';
+  if (playerIndex === getSmallBlindIndex(state)) return 'SB';
+  if (playerIndex === getBigBlindIndex(state)) return 'BB';
+  return '';
+}
+
+/**
  * Get amount needed to call for a player
  */
 export function getCallAmount(state: TableState, playerIndex: number): number {

@@ -24,6 +24,10 @@ export interface AIConfig {
   readonly style: AIStyle;
   readonly foldThreshold: number; // Fold if call amount > stack * threshold
   readonly raiseFrequency: number; // 0-1, chance to raise when possible
+  /** Optional: Bet sizing variance - min factor of pot (default: 0.5) */
+  readonly betSizeMin?: number;
+  /** Optional: Bet sizing variance - max factor of pot (default: 1.0) */
+  readonly betSizeMax?: number;
 }
 
 // ============================================================================
@@ -61,9 +65,8 @@ export function makeAIDecision(
       const betFrequency = config.style === 'aggressive' ? 0.35 :
                            config.style === 'passive' ? 0.1 : 0.2;
       if (Math.random() < betFrequency) {
-        const betSize = config.style === 'aggressive'
-          ? Math.min(Math.floor(state.pot * 0.75), validActions.maxBet)
-          : validActions.minBet;
+        // Use bet sizing variance if available
+        const betSize = calculateBetSize(state.pot, validActions, config);
         return {
           type: 'bet',
           amount: Math.max(validActions.minBet, betSize),
@@ -116,7 +119,29 @@ export function makeAIDecision(
 }
 
 /**
- * Calculate raise amount based on style
+ * Calculate a random bet size within the configured range
+ */
+function calculateBetSize(
+  pot: number,
+  validActions: ValidActions,
+  config: AIConfig
+): number {
+  const { minBet, maxBet } = validActions;
+
+  // Use configured bet sizing or fall back to style-based defaults
+  const betMin = config.betSizeMin ?? (config.style === 'passive' ? 0.3 : 0.5);
+  const betMax = config.betSizeMax ?? (config.style === 'aggressive' ? 1.2 : 0.8);
+
+  // Random factor within range for variance
+  const factor = betMin + Math.random() * (betMax - betMin);
+  const targetBet = Math.floor(pot * factor);
+
+  // Clamp to valid range
+  return Math.min(Math.max(minBet, targetBet), maxBet);
+}
+
+/**
+ * Calculate raise amount based on style with variance
  */
 function calculateRaiseAmount(
   state: TableState,
@@ -125,22 +150,19 @@ function calculateRaiseAmount(
 ): number {
   const { minRaise, maxRaise } = validActions;
 
-  switch (config.style) {
-    case 'passive':
-      // Min raise
-      return minRaise;
+  // Use configured bet sizing or fall back to style-based defaults
+  const betMin = config.betSizeMin ?? (config.style === 'passive' ? 0.3 : 0.5);
+  const betMax = config.betSizeMax ?? (config.style === 'aggressive' ? 1.5 : 1.0);
 
-    case 'aggressive':
-      // Pot-sized or larger raise
-      const potRaise = Math.min(state.pot + state.currentBet * 2, maxRaise);
-      return Math.floor(Math.max(minRaise, potRaise));
+  // Random factor within range for variance
+  const factor = betMin + Math.random() * (betMax - betMin);
 
-    case 'neutral':
-    default:
-      // 2-3x current bet
-      const midRaise = state.currentBet * 2.5;
-      return Math.floor(Math.min(Math.max(minRaise, midRaise), maxRaise));
-  }
+  // Calculate raise relative to pot
+  const potSizeRaise = state.pot * factor;
+  const targetRaise = state.currentBet + Math.floor(potSizeRaise);
+
+  // Clamp to valid range
+  return Math.min(Math.max(minRaise, targetRaise), maxRaise);
 }
 
 // ============================================================================

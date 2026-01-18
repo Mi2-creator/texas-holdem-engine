@@ -1,12 +1,23 @@
 /**
  * GameController.ts
- * Phase L2 - Orchestrates a complete Texas Hold'em hand
+ * Orchestrates a complete Texas Hold'em hand
+ *
+ * ARCHITECTURE (L9.5):
+ * - Single source of truth: this.state (TableState)
+ * - All state mutations go through this controller
+ * - Callbacks (onAction, onThinking, onHistory) are notification-only
+ * - UI receives read-only state snapshots
  *
  * Responsibilities:
  * 1. Initialize hand (shuffle, deal, post blinds)
  * 2. Run betting rounds (preflop → flop → turn → river)
  * 3. Handle showdown and winner determination
  * 4. Award pot and return hand summary
+ *
+ * FUTURE HOOKS (L9.5):
+ * - Replay: Feed saved HandHistory events to reconstruct hand
+ * - Persistence: Save getHandHistory() after each hand
+ * - Multiplayer: Sync state via events instead of callbacks
  *
  * Does NOT handle UI - pure game logic orchestration.
  */
@@ -28,6 +39,8 @@ import {
   getActingPlayers,
   getCurrentPlayer,
   getNextActivePlayerIndex,
+  getSmallBlindIndex,
+  getBigBlindIndex,
   isBettingRoundComplete,
   isOnlyOnePlayerRemaining,
   setWinners,
@@ -37,19 +50,41 @@ import {
   applyAction,
   postBlinds,
 } from '../engine/BettingRound';
-import { makeAIDecision, AIConfig, AI_STYLES } from './SimpleAI';
+import { makeAIDecision, AIConfig } from './SimpleAI';
+import { AI_PROFILES, AIProfileType } from './AIProfiles';
+import {
+  HandHistoryEvent,
+  HandStartEvent,
+  BlindsPostedEvent,
+  CardsDealtEvent,
+  PlayerActionEvent,
+  CommunityCardsEvent,
+  ShowdownEvent,
+  HandResultEvent,
+} from './HandHistory';
 
 // ============================================================================
 // Types
 // ============================================================================
+
+export interface AIPlayerConfig {
+  readonly name: string;
+  readonly profile: AIProfileType;
+}
 
 export interface GameConfig {
   readonly smallBlind: number;
   readonly bigBlind: number;
   readonly startingStack: number;
   readonly heroName: string;
-  readonly aiName: string;
-  readonly aiStyle: 'passive' | 'neutral' | 'aggressive';
+  /** @deprecated Use aiPlayers instead for multi-player games */
+  readonly aiName?: string;
+  /** @deprecated Use aiPlayers instead for multi-player games */
+  readonly aiStyle?: 'passive' | 'neutral' | 'aggressive';
+  /** AI opponents configuration (for 3+ player games) */
+  readonly aiPlayers?: readonly AIPlayerConfig[];
+  /** Delay range for AI actions in ms [min, max]. Default: [400, 800] */
+  readonly aiActionDelay?: readonly [number, number];
 }
 
 export interface PlayerHandResult {
@@ -82,6 +117,10 @@ export interface ActionEvent {
 
 export type ActionCallback = (event: ActionEvent) => void;
 export type DecisionCallback = (state: TableState, playerIndex: number) => Promise<PlayerAction>;
+/** Called when a player starts "thinking" (before their action) */
+export type ThinkingCallback = (playerIndex: number, isThinking: boolean) => void;
+/** Called when a hand history event occurs */
+export type HistoryCallback = (event: HandHistoryEvent) => void;
 
 // ============================================================================
 // Default Config
@@ -92,8 +131,11 @@ const DEFAULT_CONFIG: GameConfig = {
   bigBlind: 10,
   startingStack: 1000,
   heroName: 'Hero',
-  aiName: 'Villain',
-  aiStyle: 'neutral',
+  // Default: 2 AI opponents for 3-player game
+  aiPlayers: [
+    { name: 'Alice', profile: 'tag' },
+    { name: 'Bob', profile: 'calling-station' },
+  ],
 };
 
 // ============================================================================
@@ -105,22 +147,48 @@ export class GameController {
   private state: TableState;
   private deck: Deck;
   private actionLog: ActionEvent[];
+  private handHistory: HandHistoryEvent[];
   private heroDecisionCallback: DecisionCallback | null;
   private onAction: ActionCallback | null;
+  private onThinking: ThinkingCallback | null;
+  private onHistory: HistoryCallback | null;
+  /** Maps player ID to their AI profile type */
+  private aiProfileMap: Map<string, AIProfileType>;
 
   constructor(config: Partial<GameConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.deck = createShuffledDeck();
     this.actionLog = [];
+    this.handHistory = [];
     this.heroDecisionCallback = null;
     this.onAction = null;
+    this.onThinking = null;
+    this.onHistory = null;
+    this.aiProfileMap = new Map();
 
-    // Create initial players
+    // Create players
+    const players: Player[] = [];
+
+    // Hero is always seat 0
     const hero = createPlayer('hero', this.config.heroName, this.config.startingStack, 0);
-    const ai = createPlayer('ai', this.config.aiName, this.config.startingStack, 1);
+    players.push(hero);
+
+    // Add AI players
+    const aiPlayers = this.config.aiPlayers ?? [
+      // Fallback for legacy 2-player config
+      { name: this.config.aiName ?? 'Villain', profile: 'tag' as AIProfileType }
+    ];
+
+    aiPlayers.forEach((aiConfig, index) => {
+      const playerId = `ai-${index + 1}`;
+      const seat = index + 1;
+      const aiPlayer = createPlayer(playerId, aiConfig.name, this.config.startingStack, seat);
+      players.push(aiPlayer);
+      this.aiProfileMap.set(playerId, aiConfig.profile);
+    });
 
     this.state = createTableState(
-      [hero, ai],
+      players,
       this.config.smallBlind,
       this.config.bigBlind
     );
@@ -152,17 +220,74 @@ export class GameController {
   }
 
   /**
+   * Set callback for player thinking state (AI deliberation)
+   */
+  setThinkingCallback(callback: ThinkingCallback): void {
+    this.onThinking = callback;
+  }
+
+  /**
+   * Set callback for hand history events
+   */
+  setHistoryCallback(callback: HistoryCallback): void {
+    this.onHistory = callback;
+  }
+
+  /**
+   * Add a history event and notify callback
+   */
+  private addHistoryEvent(event: HandHistoryEvent): void {
+    this.handHistory.push(event);
+    if (this.onHistory) {
+      this.onHistory(event);
+    }
+  }
+
+  /**
    * Play a complete hand and return the result
    */
   async playHand(): Promise<HandResult> {
     // Reset for new hand
     this.startNewHand();
 
+    // Log hand start
+    const dealer = this.state.players[this.state.dealerIndex];
+    this.addHistoryEvent({
+      type: 'hand-start',
+      timestamp: Date.now(),
+      handNumber: this.state.handNumber + 1,
+      dealerName: dealer.name,
+    });
+
     // Deal hole cards
     this.dealHoleCards();
 
+    // Log cards dealt
+    const activeCount = this.state.players.filter(p => p.status !== 'out').length;
+    this.addHistoryEvent({
+      type: 'cards-dealt',
+      timestamp: Date.now(),
+      playerCount: activeCount,
+    });
+
     // Post blinds
     this.state = postBlinds(this.state);
+
+    // Log blinds
+    const sbIndex = getSmallBlindIndex(this.state);
+    const bbIndex = getBigBlindIndex(this.state);
+    this.addHistoryEvent({
+      type: 'blinds-posted',
+      timestamp: Date.now(),
+      smallBlind: {
+        playerName: this.state.players[sbIndex].name,
+        amount: this.config.smallBlind,
+      },
+      bigBlind: {
+        playerName: this.state.players[bbIndex].name,
+        amount: this.config.bigBlind,
+      },
+    });
 
     // Move to preflop
     this.state = advanceStreet(this.state);
@@ -172,18 +297,21 @@ export class GameController {
 
     if (!this.isHandOver()) {
       this.dealFlop();
+      this.logCommunityCards('flop', this.state.communityCards.slice(0, 3));
       this.state = advanceStreet(this.state);
       await this.runBettingRound();
     }
 
     if (!this.isHandOver()) {
       this.dealTurn();
+      this.logCommunityCards('turn', this.state.communityCards.slice(3, 4));
       this.state = advanceStreet(this.state);
       await this.runBettingRound();
     }
 
     if (!this.isHandOver()) {
       this.dealRiver();
+      this.logCommunityCards('river', this.state.communityCards.slice(4, 5));
       this.state = advanceStreet(this.state);
       await this.runBettingRound();
     }
@@ -193,7 +321,24 @@ export class GameController {
   }
 
   /**
+   * Log community cards event
+   */
+  private logCommunityCards(street: 'flop' | 'turn' | 'river', newCards: readonly Card[]): void {
+    this.addHistoryEvent({
+      type: 'community-cards',
+      timestamp: Date.now(),
+      street,
+      cards: newCards,
+      allCommunityCards: this.state.communityCards,
+    });
+  }
+
+  /**
    * Play hand synchronously (for testing / AI vs AI)
+   *
+   * NOTE (L9.5): This method does NOT log HandHistory events.
+   * Use playHand() for full history tracking. This is intentional
+   * to keep sync testing fast and simple.
    */
   playHandSync(): HandResult {
     // Reset for new hand
@@ -241,6 +386,7 @@ export class GameController {
     // Create fresh shuffled deck
     this.deck = createShuffledDeck();
     this.actionLog = [];
+    this.handHistory = [];
 
     // Reset players for new hand
     const newPlayers = this.state.players.map((p, i) => ({
@@ -315,6 +461,21 @@ export class GameController {
   // Betting Round Management
   // ============================================================================
 
+  /**
+   * Get a random delay within the configured AI action delay range
+   */
+  private getAIDelay(): number {
+    const [min, max] = this.config.aiActionDelay ?? [400, 800];
+    return min + Math.random() * (max - min);
+  }
+
+  /**
+   * Wait for specified milliseconds
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   private async runBettingRound(): Promise<void> {
     while (!isBettingRoundComplete(this.state) && !this.isHandOver()) {
       const currentPlayer = getCurrentPlayer(this.state);
@@ -324,11 +485,25 @@ export class GameController {
       let action: PlayerAction;
 
       if (currentPlayer.id === 'hero' && this.heroDecisionCallback) {
-        // Wait for hero decision
+        // Wait for hero decision (no thinking indicator for human)
         action = await this.heroDecisionCallback(this.state, playerIndex);
       } else {
-        // AI decision
+        // AI decision with thinking delay
+        // Notify UI that AI is thinking
+        if (this.onThinking) {
+          this.onThinking(playerIndex, true);
+        }
+
+        // Simulate thinking time
+        await this.delay(this.getAIDelay());
+
+        // Get the AI decision
         action = this.getAIDecision();
+
+        // Notify UI that AI finished thinking
+        if (this.onThinking) {
+          this.onThinking(playerIndex, false);
+        }
       }
 
       this.applyPlayerAction(playerIndex, action);
@@ -349,8 +524,20 @@ export class GameController {
   }
 
   private getAIDecision(): PlayerAction {
-    const aiConfig = AI_STYLES[this.config.aiStyle];
-    return makeAIDecision(this.state, aiConfig);
+    const currentPlayer = getCurrentPlayer(this.state);
+    if (!currentPlayer) {
+      return { type: 'fold' };
+    }
+
+    // Get the AI profile for this player
+    const profileType = this.aiProfileMap.get(currentPlayer.id);
+    if (!profileType) {
+      // Fallback to TAG if profile not found
+      return makeAIDecision(this.state, AI_PROFILES['tag']);
+    }
+
+    const profile = AI_PROFILES[profileType];
+    return makeAIDecision(this.state, profile);
   }
 
   private applyPlayerAction(playerIndex: number, action: PlayerAction): void {
@@ -362,7 +549,7 @@ export class GameController {
     if (result.success) {
       this.state = result.newState;
 
-      // Log the action
+      // Log the action (legacy)
       const event: ActionEvent = {
         street,
         playerIndex,
@@ -376,6 +563,16 @@ export class GameController {
       if (this.onAction) {
         this.onAction(event);
       }
+
+      // Add to hand history
+      this.addHistoryEvent({
+        type: 'player-action',
+        timestamp: Date.now(),
+        street,
+        playerName: player.name,
+        action,
+        potAfter: this.state.pot,
+      });
     }
   }
 
@@ -452,6 +649,30 @@ export class GameController {
       };
     });
 
+    // Log showdown if applicable
+    if (!endedByFold && this.state.communityCards.length === 5) {
+      this.addHistoryEvent({
+        type: 'showdown',
+        timestamp: Date.now(),
+        players: playerResults.map(pr => ({
+          name: pr.playerName,
+          holeCards: pr.holeCards,
+          handDescription: pr.handRank?.description ?? 'Unknown',
+          folded: pr.folded,
+        })),
+      });
+    }
+
+    // Log hand result
+    this.addHistoryEvent({
+      type: 'hand-result',
+      timestamp: Date.now(),
+      winnerNames,
+      potAmount: this.state.pot,
+      winningHand: winningDescription,
+      endedByFold,
+    });
+
     return {
       handNumber: this.state.handNumber,
       winners: winnerIds,
@@ -489,10 +710,11 @@ export class GameController {
   }
 
   /**
-   * Check if game can continue (both players have chips)
+   * Check if game can continue (at least 2 players have chips)
    */
   canContinue(): boolean {
-    return this.state.players.every(p => p.stack > 0);
+    const playersWithChips = this.state.players.filter(p => p.stack > 0);
+    return playersWithChips.length >= 2;
   }
 
   /**
@@ -500,6 +722,17 @@ export class GameController {
    */
   getActionLog(): readonly ActionEvent[] {
     return this.actionLog;
+  }
+
+  /**
+   * Get full hand history for current hand
+   *
+   * FUTURE HOOK (L9.5): Use for persistence/replay
+   * - Save: JSON.stringify(createHandHistory(handNumber, getHandHistory()))
+   * - Replay: Parse and step through events to reconstruct
+   */
+  getHandHistory(): readonly HandHistoryEvent[] {
+    return this.handHistory;
   }
 }
 

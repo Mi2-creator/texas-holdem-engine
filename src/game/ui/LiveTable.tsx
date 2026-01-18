@@ -11,7 +11,7 @@
 
 import React from 'react';
 import { Card, SUIT_SYMBOLS } from '../engine/Card';
-import { TableState, Player } from '../engine/TableState';
+import { TableState, Player, getPositionLabel } from '../engine/TableState';
 
 // ============================================================================
 // Display Helpers
@@ -45,6 +45,7 @@ interface LiveTableProps {
   readonly heroIndex: number;
   readonly showOpponentCards: boolean;
   readonly lastActions?: Record<number, string>;
+  readonly thinkingPlayerIndex?: number | null;
 }
 
 // ============================================================================
@@ -157,6 +158,37 @@ const styles = {
     marginTop: '4px',
     textTransform: 'capitalize' as const,
   },
+
+  positionBadge: {
+    position: 'absolute' as const,
+    top: '-8px',
+    right: '-8px',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontSize: '9px',
+    fontWeight: 700,
+    letterSpacing: '0.5px',
+  },
+
+  thinkingIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    backgroundColor: 'rgba(99, 102, 241, 0.25)',
+    color: '#a5b4fc',
+    fontSize: '11px',
+    fontWeight: 500,
+    marginTop: '4px',
+  },
+
+  thinkingDot: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    backgroundColor: '#a5b4fc',
+  },
 };
 
 // ============================================================================
@@ -232,6 +264,8 @@ interface PlayerPositionProps {
   readonly isActive: boolean;
   readonly showCards: boolean;
   readonly lastAction?: string;
+  readonly positionLabel?: 'BTN' | 'SB' | 'BB' | '';
+  readonly isThinking?: boolean;
 }
 
 function PlayerPosition({
@@ -241,9 +275,22 @@ function PlayerPosition({
   isActive,
   showCards,
   lastAction,
+  positionLabel,
+  isThinking,
 }: PlayerPositionProps): React.ReactElement {
   const isFolded = player.status === 'folded';
   const isAllIn = player.status === 'all-in';
+  const isOut = player.status === 'out';
+
+  // Position badge colors
+  const getPositionColor = (label: string): { bg: string; text: string } => {
+    switch (label) {
+      case 'BTN': return { bg: 'rgba(255, 255, 255, 0.9)', text: '#000' };
+      case 'SB': return { bg: 'rgba(59, 130, 246, 0.8)', text: '#fff' };
+      case 'BB': return { bg: 'rgba(234, 179, 8, 0.8)', text: '#000' };
+      default: return { bg: 'transparent', text: 'transparent' };
+    }
+  };
 
   // Color for last action indicator
   const getActionColor = (action: string): { bg: string; text: string } => {
@@ -290,12 +337,24 @@ function PlayerPosition({
         style={{
           ...styles.playerInfo,
           ...(isActive ? styles.playerInfoActive : {}),
+          position: 'relative' as const,
         }}
       >
+        {/* Position Badge */}
+        {positionLabel && (
+          <div
+            style={{
+              ...styles.positionBadge,
+              backgroundColor: getPositionColor(positionLabel).bg,
+              color: getPositionColor(positionLabel).text,
+            }}
+          >
+            {positionLabel}
+          </div>
+        )}
         <div style={styles.playerName}>
           {player.name}
           {isHero && ' (You)'}
-          {player.isDealer && ' 🔘'}
         </div>
         <div style={styles.playerStack}>
           ${formatChips(player.stack)}
@@ -309,8 +368,27 @@ function PlayerPosition({
         )}
       </div>
 
+      {/* Thinking Indicator */}
+      {isThinking && !isFolded && (
+        <div style={styles.thinkingIndicator}>
+          <div
+            className="animate-thinking-dot"
+            style={{ ...styles.thinkingDot, animationDelay: '0ms' }}
+          />
+          <div
+            className="animate-thinking-dot"
+            style={{ ...styles.thinkingDot, animationDelay: '200ms' }}
+          />
+          <div
+            className="animate-thinking-dot"
+            style={{ ...styles.thinkingDot, animationDelay: '400ms' }}
+          />
+          <span>Thinking...</span>
+        </div>
+      )}
+
       {/* Last Action Indicator */}
-      {lastAction && !isFolded && (
+      {lastAction && !isFolded && !isThinking && (
         <div
           className="animate-action-slide"
           style={{
@@ -335,12 +413,25 @@ export function LiveTable({
   heroIndex,
   showOpponentCards,
   lastActions = {},
+  thinkingPlayerIndex,
 }: LiveTableProps): React.ReactElement {
-  // Player positions for 2-player game
-  const positions = [
-    { top: '85%', left: '50%' },  // Hero (bottom)
-    { top: '15%', left: '50%' },  // Opponent (top)
-  ];
+  // Player positions based on player count
+  const getPositions = (numPlayers: number): Array<{ top: string; left: string }> => {
+    if (numPlayers === 2) {
+      return [
+        { top: '85%', left: '50%' },  // Hero (bottom)
+        { top: '15%', left: '50%' },  // Opponent (top)
+      ];
+    }
+    // 3 players: Hero at bottom, opponents at top-left and top-right
+    return [
+      { top: '85%', left: '50%' },   // Seat 0: Hero (bottom center)
+      { top: '20%', left: '25%' },   // Seat 1: Opponent (top-left)
+      { top: '20%', left: '75%' },   // Seat 2: Opponent (top-right)
+    ];
+  };
+
+  const positions = getPositions(state.players.length);
 
   return (
     <div style={styles.container}>
@@ -373,11 +464,13 @@ export function LiveTable({
         <PlayerPosition
           key={player.id}
           player={player}
-          position={positions[index]}
+          position={positions[index] ?? positions[0]}
           isHero={index === heroIndex}
           isActive={index === state.activePlayerIndex && state.street !== 'showdown' && state.street !== 'complete'}
           showCards={showOpponentCards || index === heroIndex}
           lastAction={lastActions[index]}
+          positionLabel={getPositionLabel(state, index)}
+          isThinking={index === thinkingPlayerIndex}
         />
       ))}
     </div>
