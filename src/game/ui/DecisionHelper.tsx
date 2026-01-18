@@ -125,9 +125,10 @@ function getPostflopStrengthScore(
 }
 
 /**
- * Analyze the situation and provide a recommendation
+ * Analyze the situation and provide a recommendation.
+ * Exported for use by MistakeReview to compare player actions.
  */
-function analyzeDecision(
+export function analyzeDecision(
   pot: number,
   callAmount: number,
   holeCards: readonly Card[],

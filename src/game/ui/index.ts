@@ -1,7 +1,8 @@
 /**
- * Game UI - Phase L16
+ * Game UI - Phase L19
  *
- * Live game UI components with replay, export, stats, pot odds, decision helper, training mode, and lessons.
+ * Live game UI components with replay, export, stats, pot odds, decision helper,
+ * training mode, lessons, and mistake review.
  */
 
 export * from './LiveTable';
@@ -15,3 +16,4 @@ export * from './PotOddsDisplay';
 export * from './DecisionHelper';
 export * from './TrainingMode';
 export * from './LessonSystem';
+export * from './MistakeReview';

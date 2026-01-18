@@ -68,6 +68,12 @@ import {
   saveLessonProgress,
   resetLessonProgress,
 } from './LessonSystem';
+import {
+  MistakeRecord,
+  MistakeReview,
+  DecisionContext,
+  detectMistake,
+} from './MistakeReview';
 
 // ============================================================================
 // Display Helpers
@@ -235,6 +241,28 @@ const styles = {
   // Dimmed events (after current in replay)
   historyDimmed: {
     opacity: 0.35,
+  },
+
+  // Mistake highlight style
+  historyMistake: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderLeft: '3px solid #ef4444',
+    paddingLeft: '8px',
+    marginLeft: '-8px',
+    borderRadius: '0 4px 4px 0',
+  },
+
+  mistakeLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    fontSize: '9px',
+    fontWeight: 600,
+    color: '#ef4444',
+    marginLeft: '8px',
   },
 
   replayControlsContainer: {
@@ -553,8 +581,10 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
   const [lessonHint, setLessonHint] = useState<LessonHint | null>(null);
   const [lessonFeedback, setLessonFeedback] = useState<LessonFeedback | null>(null);
   const [lastHeroAction, setLastHeroAction] = useState<PlayerAction | null>(null);
+  const [mistakes, setMistakes] = useState<MistakeRecord[]>([]);
 
   const controllerRef = useRef<GameController | null>(null);
+  const mistakeIdRef = useRef<number>(0);
   const actionResolverRef = useRef<((action: PlayerAction) => void) | null>(null);
   const autoDealTimerRef = useRef<number | null>(null);
 
@@ -654,6 +684,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setReplayState(createInitialReplayState());
     setLessonFeedback(null);
     setLastHeroAction(null);
+    setMistakes([]);
+    mistakeIdRef.current = 0;
     setHandCount(prev => prev + 1);
 
     // Set up hero decision callback
@@ -768,7 +800,32 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
 
   // Handle player action
   const handleAction = useCallback((action: PlayerAction) => {
-    if (actionResolverRef.current) {
+    if (actionResolverRef.current && gameState) {
+      // Detect if this is a mistake before resolving the action
+      const heroPlayer = gameState.players[heroIndex];
+      const context: DecisionContext = {
+        street: gameState.street,
+        pot: gameState.pot,
+        callAmount: gameState.currentBet - heroPlayer.currentBet,
+        holeCards: heroPlayer.holeCards,
+        communityCards: gameState.communityCards,
+        heroStack: heroPlayer.stack,
+      };
+
+      // Get current history length to track which event this corresponds to
+      const historyEventIndex = handHistory.length;
+
+      const mistake = detectMistake(
+        context,
+        action,
+        historyEventIndex,
+        mistakeIdRef.current++
+      );
+
+      if (mistake) {
+        setMistakes(prev => [...prev, mistake]);
+      }
+
       setPhase('playing');
       setMessage('');
       setLastHeroAction(action);
@@ -776,7 +833,7 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
       actionResolverRef.current(action);
       actionResolverRef.current = null;
     }
-  }, []);
+  }, [gameState, handHistory.length, heroIndex]);
 
   // Restart the entire game
   const restartGame = useCallback(() => {
@@ -801,6 +858,8 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
     setLessonHint(null);
     setLessonFeedback(null);
     setLastHeroAction(null);
+    setMistakes([]);
+    mistakeIdRef.current = 0;
   }, [config]);
 
   // Format action for display
@@ -1179,6 +1238,25 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
           {/* Lesson Feedback - Show after hand in lesson mode */}
           {lessonFeedback && <LessonFeedbackDisplay feedback={lessonFeedback} />}
 
+          {/* Mistake Review - Show if mistakes were made */}
+          {(trainingSettings.enabled || activeLesson) && (
+            <MistakeReview
+              mistakes={mistakes}
+              onStepToMistake={(index) => {
+                // Step to the mistake in replay mode
+                const mistake = mistakes[index];
+                if (mistake) {
+                  setReplayState({
+                    isReplaying: true,
+                    isPlaying: false,
+                    currentIndex: mistake.historyEventIndex,
+                    speed: 'normal',
+                  });
+                }
+              }}
+            />
+          )}
+
           {/* Actions */}
           <div style={styles.resultActions}>
             <button
@@ -1221,12 +1299,17 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
               : styleType === 'result' ? styles.historyResult
               : styles.actionLogEntry;
 
+            // Check if this event is a mistake
+            const mistakeAtIndex = mistakes.find(m => m.historyEventIndex === i);
+            const isMistake = mistakeAtIndex !== undefined;
+
             // Apply replay highlighting
             const isCurrentReplayEvent = replayState.isReplaying && i === replayState.currentIndex;
             const isAfterCurrentEvent = replayState.isReplaying && i > replayState.currentIndex;
 
             const eventStyle = {
               ...baseStyle,
+              ...(isMistake ? styles.historyMistake : {}),
               ...(isCurrentReplayEvent ? styles.historyHighlight : {}),
               ...(isAfterCurrentEvent ? styles.historyDimmed : {}),
             };
@@ -1234,6 +1317,11 @@ export function LiveGame({ config }: LiveGameProps): React.ReactElement {
             return (
               <div key={i} style={eventStyle}>
                 {formatHistoryEvent(event)}
+                {isMistake && (
+                  <span style={styles.mistakeLabel}>
+                    ! Mistake
+                  </span>
+                )}
               </div>
             );
           })}
