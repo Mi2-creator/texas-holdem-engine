@@ -1,4 +1,16 @@
 /**
+ * ============================================================================
+ * FROZEN - LEGACY CODE - DO NOT MODIFY
+ * ============================================================================
+ * This file is part of the training/coaching system that is now deprecated.
+ * Do NOT extend, refactor, or build upon this code.
+ *
+ * Frozen as of: Phase 1 Freeze (Pokerrrr2-style refactor)
+ * Reason: Training/analysis features are legacy; focus is on core poker table UI
+ * ============================================================================
+ */
+
+/**
  * playerLanguage.ts
  * Phase 9.3 - Player Language Adapter
  *
