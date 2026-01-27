@@ -531,3 +531,9 @@ export function resetEconomyEngine(): EconomyEngine {
   economyEngineInstance = new EconomyEngine();
   return economyEngineInstance;
 }
+
+// ============================================================================
+// Configurable Economy (Phase 15)
+// ============================================================================
+
+export * from './config';
