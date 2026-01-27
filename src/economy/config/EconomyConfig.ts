@@ -501,3 +501,8 @@ export function createDefaultConfig(): EconomyConfig {
 export function createConfigBuilder(): EconomyConfigBuilder {
   return new EconomyConfigBuilder();
 }
+
+/**
+ * Default economy config singleton instance
+ */
+export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = new EconomyConfig();

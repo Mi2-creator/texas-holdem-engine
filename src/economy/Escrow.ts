@@ -461,6 +461,42 @@ export class EscrowManager {
   }
 
   /**
+   * Get all escrows in the system
+   */
+  getAllEscrows(): readonly TableEscrow[] {
+    return Array.from(this.escrows.values());
+  }
+
+  /**
+   * Restore escrow state directly (for recovery only)
+   * Does NOT modify balance - assumes balance is already in correct state
+   */
+  restoreEscrow(
+    tableId: TableId,
+    playerId: PlayerId,
+    stack: number,
+    committed: number,
+    totalBuyIn: number,
+    totalCashOut: number
+  ): void {
+    const key = this.getKey(tableId, playerId);
+    const now = Date.now();
+
+    const escrow: TableEscrow = {
+      playerId,
+      tableId,
+      stack,
+      committed,
+      totalBuyIn,
+      totalCashOut,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.escrows.set(key, escrow);
+  }
+
+  /**
    * Clear all escrows (for testing)
    */
   clear(): void {
