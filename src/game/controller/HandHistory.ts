@@ -14,13 +14,14 @@
 import { Card, formatCard } from '../engine/Card';
 import { Street } from '../engine/TableState';
 import { PlayerAction } from '../engine/BettingRound';
+import { HandRankResult } from '../../core/game/hand';
 
 // ============================================================================
 // Version (for future persistence/replay compatibility)
 // ============================================================================
 
 /** Current hand history format version. Increment on breaking changes. */
-export const HAND_HISTORY_VERSION = 1;
+export const HAND_HISTORY_VERSION = 2;
 
 // ============================================================================
 // Event Types
@@ -32,8 +33,12 @@ export type HandHistoryEventType =
   | 'cards-dealt'
   | 'player-action'
   | 'community-cards'
+  | 'showdown-started'
+  | 'hand-evaluated'
+  | 'pot-awarded'
   | 'showdown'
-  | 'hand-result';
+  | 'hand-result'
+  | 'hand-completed';
 
 interface BaseHistoryEvent {
   readonly type: HandHistoryEventType;
@@ -90,14 +95,53 @@ export interface HandResultEvent extends BaseHistoryEvent {
   readonly endedByFold: boolean;
 }
 
+// Phase 11 - New showdown events
+export interface ShowdownStartedHistoryEvent extends BaseHistoryEvent {
+  readonly type: 'showdown-started';
+  readonly playerCount: number;
+  readonly potSize: number;
+}
+
+export interface HandEvaluatedHistoryEvent extends BaseHistoryEvent {
+  readonly type: 'hand-evaluated';
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly holeCards: readonly Card[];
+  readonly handRank: HandRankResult;
+}
+
+export interface PotAwardedHistoryEvent extends BaseHistoryEvent {
+  readonly type: 'pot-awarded';
+  readonly winnerIds: readonly string[];
+  readonly winnerNames: readonly string[];
+  readonly potAmount: number;
+  readonly amountPerWinner: number;
+  readonly isSplitPot: boolean;
+  readonly winningHandDescription: string;
+}
+
+export interface HandCompletedHistoryEvent extends BaseHistoryEvent {
+  readonly type: 'hand-completed';
+  readonly winnerIds: readonly string[];
+  readonly winnerNames: readonly string[];
+  readonly potAwarded: number;
+  readonly isSplitPot: boolean;
+  readonly winningHandDescription: string;
+  readonly endedByFold: boolean;
+}
+
 export type HandHistoryEvent =
   | HandStartEvent
   | BlindsPostedEvent
   | CardsDealtEvent
   | PlayerActionEvent
   | CommunityCardsEvent
+  | ShowdownStartedHistoryEvent
+  | HandEvaluatedHistoryEvent
+  | PotAwardedHistoryEvent
   | ShowdownEvent
-  | HandResultEvent;
+  | HandResultEvent
+  | HandCompletedHistoryEvent;
 
 // ============================================================================
 // Hand History Container
@@ -187,6 +231,18 @@ export function formatHistoryEvent(event: HandHistoryEvent): string {
       const streetLabel = event.street.charAt(0).toUpperCase() + event.street.slice(1);
       return `*** ${streetLabel} *** [${formatCardsForLog(event.cards)}]`;
 
+    case 'showdown-started':
+      return `*** SHOWDOWN *** (${event.playerCount} players, Pot: $${event.potSize})`;
+
+    case 'hand-evaluated':
+      return `${event.playerName} shows [${formatCardsForLog(event.holeCards)}] - ${event.handRank.description}`;
+
+    case 'pot-awarded':
+      if (event.isSplitPot) {
+        return `*** Split pot: ${event.winnerNames.join(', ')} each win $${event.amountPerWinner} with ${event.winningHandDescription} ***`;
+      }
+      return `*** ${event.winnerNames[0]} wins $${event.potAmount} with ${event.winningHandDescription} ***`;
+
     case 'showdown':
       const showdownLines = event.players
         .filter(p => !p.folded)
@@ -199,6 +255,15 @@ export function formatHistoryEvent(event: HandHistoryEvent): string {
         return `*** ${event.winnerNames[0]} wins $${event.potAmount} (opponent folded) ***`;
       }
       return `*** ${event.winnerNames.join(', ')} wins $${event.potAmount} with ${event.winningHand} ***`;
+
+    case 'hand-completed':
+      if (event.endedByFold) {
+        return `Hand complete: ${event.winnerNames[0]} wins $${event.potAwarded} (opponent folded)`;
+      }
+      if (event.isSplitPot) {
+        return `Hand complete: Split pot - ${event.winnerNames.join(', ')} each win with ${event.winningHandDescription}`;
+      }
+      return `Hand complete: ${event.winnerNames[0]} wins $${event.potAwarded} with ${event.winningHandDescription}`;
 
     default:
       return '';
@@ -221,8 +286,13 @@ export function getEventStyleType(event: HandHistoryEvent): EventStyleType {
       return 'action';
     case 'community-cards':
     case 'showdown':
+    case 'hand-evaluated':
       return 'cards';
+    case 'showdown-started':
+      return 'header';
+    case 'pot-awarded':
     case 'hand-result':
+    case 'hand-completed':
       return 'result';
     default:
       return 'info';

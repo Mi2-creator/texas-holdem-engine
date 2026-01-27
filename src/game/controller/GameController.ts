@@ -27,6 +27,16 @@ import { Deck, createShuffledDeck, dealCards } from '../engine/Deck';
 import { HandRank } from '../engine/HandRank';
 import { evaluateHand, determineWinners } from '../engine/HandEvaluator';
 import {
+  resolveShowdown,
+  resolveShowdownWithEvents,
+  ShowdownPlayer,
+  ShowdownConfig,
+  ShowdownEvent as CoreShowdownEvent,
+  ShowdownResult,
+  isShowdownNeeded,
+  HandRankResult,
+} from '../../core/game/hand';
+import {
   TableState,
   Player,
   Street,
@@ -61,6 +71,10 @@ import {
   CommunityCardsEvent,
   ShowdownEvent,
   HandResultEvent,
+  ShowdownStartedHistoryEvent,
+  HandEvaluatedHistoryEvent,
+  PotAwardedHistoryEvent,
+  HandCompletedHistoryEvent,
 } from './HandHistory';
 
 // ============================================================================
@@ -590,6 +604,7 @@ export class GameController {
 
     let winnerIndices: number[];
     let winningDescription: string;
+    let showdownResult: ShowdownResult | null = null;
 
     if (endedByFold) {
       // Winner by fold
@@ -597,22 +612,29 @@ export class GameController {
       winnerIndices = [this.state.players.findIndex(p => p.id === winner.id)];
       winningDescription = 'Opponent folded';
     } else {
-      // Showdown
-      const hands = activePlayers.map(p => {
-        const allCards = [...p.holeCards, ...this.state.communityCards];
-        return allCards;
+      // Showdown - use new showdown system
+      const showdownPlayers: ShowdownPlayer[] = this.state.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        holeCards: p.holeCards,
+        folded: p.status === 'folded',
+      }));
+
+      const showdownConfig: ShowdownConfig = {
+        players: showdownPlayers,
+        communityCards: this.state.communityCards,
+        potSize: this.state.pot,
+      };
+
+      // Resolve showdown with event emission
+      showdownResult = resolveShowdownWithEvents(showdownConfig, (event: CoreShowdownEvent) => {
+        this.handleShowdownEvent(event);
       });
 
-      const relativeWinners = determineWinners(hands);
-      winnerIndices = relativeWinners.map(i => {
-        const winner = activePlayers[i];
-        return this.state.players.findIndex(p => p.id === winner.id);
-      });
-
-      // Get winning hand description
-      const winnerCards = [...activePlayers[relativeWinners[0]].holeCards, ...this.state.communityCards];
-      const winnerRank = evaluateHand(winnerCards);
-      winningDescription = winnerRank.description;
+      winnerIndices = showdownResult.winnerIds.map(id =>
+        this.state.players.findIndex(p => p.id === id)
+      );
+      winningDescription = showdownResult.winningHandDescription;
     }
 
     // Award pot to winner(s)
@@ -649,7 +671,7 @@ export class GameController {
       };
     });
 
-    // Log showdown if applicable
+    // Log legacy showdown event if applicable (for backwards compatibility)
     if (!endedByFold && this.state.communityCards.length === 5) {
       this.addHistoryEvent({
         type: 'showdown',
@@ -663,13 +685,25 @@ export class GameController {
       });
     }
 
-    // Log hand result
+    // Log hand result (legacy event)
     this.addHistoryEvent({
       type: 'hand-result',
       timestamp: Date.now(),
       winnerNames,
       potAmount: this.state.pot,
       winningHand: winningDescription,
+      endedByFold,
+    });
+
+    // Log hand completed (new Phase 11 event)
+    this.addHistoryEvent({
+      type: 'hand-completed',
+      timestamp: Date.now(),
+      winnerIds,
+      winnerNames,
+      potAwarded: this.state.pot,
+      isSplitPot: showdownResult?.isSplitPot ?? false,
+      winningHandDescription: winningDescription,
       endedByFold,
     });
 
@@ -684,6 +718,51 @@ export class GameController {
       endedByFold,
       finalStreet: this.state.street,
     };
+  }
+
+  /**
+   * Handle showdown events from the showdown resolver
+   */
+  private handleShowdownEvent(event: CoreShowdownEvent): void {
+    switch (event.type) {
+      case 'showdown-started':
+        this.addHistoryEvent({
+          type: 'showdown-started',
+          timestamp: Date.now(),
+          playerCount: event.playerCount,
+          potSize: event.potSize,
+        });
+        break;
+
+      case 'hand-evaluated':
+        this.addHistoryEvent({
+          type: 'hand-evaluated',
+          timestamp: Date.now(),
+          playerId: event.playerId,
+          playerName: event.playerName,
+          holeCards: event.holeCards,
+          handRank: event.handRank,
+        });
+        break;
+
+      case 'pot-awarded':
+        this.addHistoryEvent({
+          type: 'pot-awarded',
+          timestamp: Date.now(),
+          winnerIds: event.winnerIds,
+          winnerNames: event.winnerNames,
+          potAmount: event.potAmount,
+          amountPerWinner: event.amountPerWinner,
+          isSplitPot: event.isSplitPot,
+          winningHandDescription: event.winningHandDescription,
+        });
+        break;
+
+      case 'hand-completed':
+        // This is emitted by resolveShowdownWithEvents but we emit our own
+        // hand-completed event with more context, so we skip this one
+        break;
+    }
   }
 
   // ============================================================================
