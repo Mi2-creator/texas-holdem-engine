@@ -124,3 +124,52 @@ export {
   validateAtBoundary,
   validateSettlementAtBoundary,
 } from './invariants';
+
+// Revenue Attribution Views (Phase 26)
+export {
+  // Types
+  TimeWindow,
+  TimeGranularity,
+  TimeBucket,
+
+  // Platform revenue
+  PlatformRevenueQuery,
+  PlatformRevenueEntry,
+  PlatformRevenueGroup,
+  PlatformRevenueSummary,
+  PlatformRevenueView,
+  createPlatformRevenueView,
+
+  // Club revenue
+  ClubRevenueQuery,
+  ClubRevenueEntry,
+  ClubRevenueGroup,
+  ClubRevenueSummary,
+  ClubRevenueView,
+  createClubRevenueView,
+
+  // Agent commission
+  AgentCommissionQuery,
+  AgentCommissionEntry,
+  AgentCommissionGroup,
+  AgentCommissionSummary,
+  AgentCommissionRollup,
+  AgentCommissionView,
+  createAgentCommissionView,
+
+  // Table rake timeline
+  TableRakeTimelineQuery,
+  RakeTimelineEntry,
+  RakeBreakdown,
+  TableRakeTimeline,
+  TimelineComparisonResult,
+  TimelineDifference,
+  TableRakeTimelineView,
+  createTableRakeTimelineView,
+
+  // View utilities
+  ViewResult,
+  calculateTimeBucket,
+  isWithinTimeWindow,
+  normalizeTimeWindow,
+} from './views';
