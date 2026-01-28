@@ -429,6 +429,7 @@ export class ExternalValueBoundary {
       'REBUY',
       'ADJUSTMENT',
       'BONUS',
+      'TOP_UP',
     ];
 
     if (!validSources.includes(source)) {

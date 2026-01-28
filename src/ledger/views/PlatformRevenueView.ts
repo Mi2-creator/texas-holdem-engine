@@ -346,6 +346,7 @@ export class PlatformRevenueView {
       REBUY: 0,
       ADJUSTMENT: 0,
       BONUS: 0,
+      TOP_UP: 0,
     };
 
     for (const entry of entries) {

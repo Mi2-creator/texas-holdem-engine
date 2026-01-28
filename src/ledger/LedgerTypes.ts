@@ -95,6 +95,7 @@ export interface AttributionParty {
  * REBUY - Tournament rebuy revenue
  * ADJUSTMENT - Manual adjustment (with reason required)
  * BONUS - Promotional bonus attribution
+ * TOP_UP - External chip addition to player (not revenue)
  */
 export type AttributionSource =
   | 'HAND_SETTLEMENT'
@@ -102,7 +103,8 @@ export type AttributionSource =
   | 'TOURNAMENT_PAYOUT'
   | 'REBUY'
   | 'ADJUSTMENT'
-  | 'BONUS';
+  | 'BONUS'
+  | 'TOP_UP';
 
 /**
  * Sub-categories for hand settlement attribution
