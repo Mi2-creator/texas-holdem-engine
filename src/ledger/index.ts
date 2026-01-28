@@ -93,3 +93,34 @@ export {
   LedgerView,
   createLedgerView,
 } from './LedgerView';
+
+// Invariants (Phase 25.1)
+export {
+  // Violation types
+  InvariantType,
+  ViolationSeverity,
+  InvariantViolation,
+  InvariantCheckResult,
+  FullInvariantCheckResult,
+
+  // Invariant specifications
+  InvariantSpec,
+  INVARIANT_SPECS,
+  getAllInvariants,
+  getCriticalInvariants,
+  InvariantCheckConfig,
+  DEFAULT_INVARIANT_CONFIG,
+  STRICT_INVARIANT_CONFIG,
+
+  // Invariant checker
+  InvariantChecker,
+  createInvariantChecker,
+
+  // External value boundary
+  BoundaryViolation,
+  BoundaryValidationResult,
+  ExternalValueBoundary,
+  createExternalValueBoundary,
+  validateAtBoundary,
+  validateSettlementAtBoundary,
+} from './invariants';
