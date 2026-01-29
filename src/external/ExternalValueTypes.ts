@@ -1,8 +1,8 @@
 /**
  * ExternalValueTypes.ts
- * Phase 32 - External Settlement Boundary (Interface Only)
+ * Phase 32/33 - External Value Types
  *
- * Neutral, abstract value concepts for external settlement.
+ * Neutral, abstract value concepts for external settlement and references.
  * Types only - no logic, no side effects, no runtime behavior.
  */
 
@@ -12,6 +12,7 @@
 
 declare const ExternalValueSourceIdBrand: unique symbol;
 declare const ExternalReferenceIdBrand: unique symbol;
+declare const ExternalValueRefIdBrand: unique symbol;
 
 /**
  * Branded type for external value source identifier.
@@ -24,6 +25,12 @@ export type ExternalValueSourceId = string & { readonly [ExternalValueSourceIdBr
  * Opaque identifier for tracking external requests.
  */
 export type ExternalReferenceId = string & { readonly [ExternalReferenceIdBrand]: never };
+
+/**
+ * Branded type for external value reference identifier.
+ * Opaque identifier for external value references in the registry.
+ */
+export type ExternalValueRefId = string & { readonly [ExternalValueRefIdBrand]: never };
 
 /**
  * Integer-only external value amount.
@@ -50,6 +57,16 @@ export type ExternalValueDirection = 'IN' | 'OUT';
  * REJECTED = settlement rejected
  */
 export type ExternalValueStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
+
+/**
+ * Source classification for external value references.
+ * MANUAL = manually credited by admin
+ * CLUB_CREDIT = club-level credit allocation
+ * PROMO = promotional credit
+ * LEGACY = migrated from legacy system
+ * ADJUSTMENT = reconciliation adjustment
+ */
+export type ExternalValueSource = 'MANUAL' | 'CLUB_CREDIT' | 'PROMO' | 'LEGACY' | 'ADJUSTMENT';
 
 // ============================================================================
 // Type Guards (compile-time only, no runtime behavior)
@@ -91,4 +108,18 @@ export function isExternalValueDirection(value: string): value is ExternalValueD
  */
 export function isExternalValueStatus(value: string): value is ExternalValueStatus {
   return value === 'PENDING' || value === 'CONFIRMED' || value === 'REJECTED';
+}
+
+/**
+ * Type assertion for ExternalValueRefId.
+ */
+export function isExternalValueRefId(value: string): value is ExternalValueRefId {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Type assertion for ExternalValueSource.
+ */
+export function isExternalValueSource(value: string): value is ExternalValueSource {
+  return value === 'MANUAL' || value === 'CLUB_CREDIT' || value === 'PROMO' || value === 'LEGACY' || value === 'ADJUSTMENT';
 }
